@@ -1,6 +1,4 @@
-# Serde Versioning
-
-# Rust Versioning and Upgrading
+# Versioning
 
 This Rust project provides a simple and convenient way to handle versioning and upgrading of your data structures using Serde for serialization and deserialization.
 
