@@ -102,10 +102,6 @@ fn generate_upgrade_match_arms(ast: &DeriveInput) -> Vec<proc_macro2::TokenStrea
         let variant_ident = &version_variant.variant_ident;
 
         if !version_variant.latest {
-            // Make tuples of version_variants
-            let items: Vec<(&usize, &VersionVariant)> = version_variants.iter().map(|(k, v)| {
-                (k, v)
-            }).collect();
             let next_variant = version_variants
                 .get(&(version_number + 1))
                 .expect("No variant for next version");
