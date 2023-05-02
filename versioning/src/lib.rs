@@ -5,6 +5,11 @@ pub trait Upgrade<To> {
     fn upgrade(self) -> To;
 }
 
+pub trait Upgradable {
+    type Latest;
+    fn upgrade_to_latest(self) -> Self::Latest;
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct MyStructV1 {
     field1: String,
@@ -28,7 +33,6 @@ pub struct MyStructV3 {
 pub enum MyStructVersion {
     V1(MyStructV1),
     V2(MyStructV2),
-    #[latest]
     V3(MyStructV3),
 }
 
@@ -46,7 +50,7 @@ impl Upgrade<MyStructV3> for MyStructV2 {
         MyStructV3 {
             field1: self.field1,
             new_field: self.new_field,
-            second_new_field: "default_value".to_string(),
+            second_new_field: "default_value_v3".to_string(),
         }
     }
 }
@@ -87,13 +91,13 @@ mod tests {
     #[test]
     fn upgrade_to_latest_should_compose_upgrade_fns() -> Result<(), serde_json::Error> {
         let result = serde_json::from_str::<'static, MyStructVersion>(V1_STRUCT)?;
-        let upgraded: MyStructV3 = result.upgrade_to_latest();
+        let upgraded = result.upgrade_to_latest();
         assert_eq!(
             upgraded,
             MyStructV3 {
                 field1: "VALUE1".to_string(),
                 new_field: "default_value".to_string(),
-                second_new_field: "default_value".to_string()
+                second_new_field: "default_value_v3".to_string()
             }
         );
         Ok(())

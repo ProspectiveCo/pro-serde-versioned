@@ -11,18 +11,12 @@ pub fn upgradable_enum(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
     let name = &ast.ident;
     let mut latest_variant_ty = None;
+    let version_variants = get_version_variants(&ast);
 
-    if let Data::Enum(data_enum) = &ast.data {
-        for variant in &data_enum.variants {
-            if has_latest_attribute(&variant.attrs) {
-                let first = variant
-                    .fields
-                    .iter()
-                    .nth(0)
-                    .expect("No fields on latest variant");
-                latest_variant_ty = Some(&first.ty);
-                break;
-            }
+    for variant in version_variants.values() {
+        if variant.latest {
+            latest_variant_ty = Some(variant.variant_ty.clone());
+            break;
         }
     }
 
@@ -31,12 +25,13 @@ pub fn upgradable_enum(input: TokenStream) -> TokenStream {
         None => panic!("No latest variant found"),
     };
 
-    let upgrade_match_arms = generate_upgrade_match_arms(&ast);
+    let upgrade_match_arms = generate_upgrade_match_arms(&ast, version_variants);
 
     // gen.into()
     let gen = quote! {
-        impl #name {
-            pub fn upgrade_to_latest(self) -> #latest_variant_ty {
+        impl Upgradable for #name {
+            type Latest = #latest_variant_ty;
+            fn upgrade_to_latest(self) -> Self::Latest {
                 match self {
                     #(#upgrade_match_arms)*
                 }
@@ -47,10 +42,6 @@ pub fn upgradable_enum(input: TokenStream) -> TokenStream {
     gen.into()
 }
 
-fn has_latest_attribute(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|attr| attr.path().is_ident("latest"))
-}
-
 #[derive(Debug)]
 struct VersionVariant {
     version_number: usize,
@@ -59,43 +50,12 @@ struct VersionVariant {
     latest: bool,
 }
 
-fn generate_upgrade_match_arms(ast: &DeriveInput) -> Vec<proc_macro2::TokenStream> {
+fn generate_upgrade_match_arms(
+    ast: &DeriveInput,
+    version_variants: HashMap<usize, VersionVariant>,
+) -> Vec<proc_macro2::TokenStream> {
     let name = &ast.ident;
     let mut match_arms = Vec::new();
-    let mut version_variants: HashMap<usize, VersionVariant> = HashMap::new();
-
-    if let Data::Enum(data_enum) = &ast.data {
-        for variant in &data_enum.variants {
-            version_variants.insert(
-                variant
-                    .ident
-                    .to_string()
-                    .replace("V", "")
-                    .parse::<usize>()
-                    .expect("Invalid version number"),
-                VersionVariant {
-                    version_number: variant
-                        .ident
-                        .to_string()
-                        .replace("V", "")
-                        .parse::<usize>()
-                        .expect("Invalid version number"),
-                    variant_ident: variant.ident.clone(),
-                    variant_ty: {
-                        if variant.fields.len() != 1 {
-                            panic!("Only single-field variants are supported");
-                        }
-                        if let Fields::Unnamed(fields_unnamed) = &variant.fields {
-                            fields_unnamed.unnamed[0].ty.clone()
-                        } else {
-                            panic!("Only unnamed fields are supported");
-                        }
-                    },
-                    latest: has_latest_attribute(&variant.attrs),
-                },
-            );
-        }
-    }
 
     for version_variant in version_variants.values() {
         let version_number = version_variant.version_number;
@@ -121,43 +81,52 @@ fn generate_upgrade_match_arms(ast: &DeriveInput) -> Vec<proc_macro2::TokenStrea
         }
     }
 
-    // if let Data::Enum(data_enum) = &ast.data {
-    //     for variant in &data_enum.variants {
-    //         let variant_ident = &variant.ident;
-    //         let fields = if let Fields::Unnamed(fields_unnamed) = &variant.fields {
-    //             &fields_unnamed.unnamed
-    //         } else {
-    //             panic!("Only unnamed fields are supported");
-    //         };
-
-    //         if fields.len() != 1 {
-    //             panic!("Only single-field variants are supported");
-    //         }
-
-    //         let version_number = variant_ident
-    //             .to_string()
-    //             .replace("V", "")
-    //             .parse::<usize>()
-    //             .expect("Invalid version number");
-
-    //         let next_variant = format!("V{}", version_number + 1);
-
-    //         if !has_latest_attribute(&variant.attrs) {
-    //             let field_ty = &fields[0].ty;
-    //             match_arms.push(quote! {
-    //                 #name::#variant_ident(value) => {
-    //                     let upgraded: #field_ty = value.upgrade();
-    //                     #name::#next_variant(upgraded).upgrade_to_latest()
-    //                 },
-    //             });
-    //         } else {
-    //             let variant_ident = &variant.ident;
-    //             match_arms.push(quote! {
-    //                 #name::#variant_ident(value) => value,
-    //             });
-    //         }
-    //     }
-    // }
-
     match_arms
+}
+
+fn get_version_variants(ast: &DeriveInput) -> HashMap<usize, VersionVariant> {
+    let mut version_variants: HashMap<usize, VersionVariant> = HashMap::new();
+
+    let mut max = 0;
+
+    if let Data::Enum(data_enum) = &ast.data {
+        for variant in &data_enum.variants {
+            let version_number = variant
+                .ident
+                .to_string()
+                .replace("V", "")
+                .parse::<usize>()
+                .expect("Invalid version number");
+            max = std::cmp::max(max, version_number);
+            version_variants.insert(
+                variant
+                    .ident
+                    .to_string()
+                    .replace("V", "")
+                    .parse::<usize>()
+                    .expect("Invalid version number"),
+                VersionVariant {
+                    version_number,
+                    variant_ident: variant.ident.clone(),
+                    variant_ty: {
+                        if variant.fields.len() != 1 {
+                            panic!("Only single-field variants are supported");
+                        }
+                        if let Fields::Unnamed(fields_unnamed) = &variant.fields {
+                            fields_unnamed.unnamed[0].ty.clone()
+                        } else {
+                            panic!("Only unnamed fields are supported");
+                        }
+                    },
+                    latest: false,
+                },
+            );
+        }
+    }
+    {
+        let latest_version = version_variants.get_mut(&max).expect("No latest version");
+        latest_version.latest = true;
+    }
+
+    version_variants
 }
