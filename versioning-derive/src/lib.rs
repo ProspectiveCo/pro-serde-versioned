@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Attribute, Data, DeriveInput, Fields};
+use syn::{Data, DeriveInput, Fields};
 
 #[proc_macro_derive(UpgradableEnum, attributes(latest))]
 pub fn upgradable_enum(input: TokenStream) -> TokenStream {
@@ -29,7 +29,7 @@ pub fn upgradable_enum(input: TokenStream) -> TokenStream {
 
     // gen.into()
     let gen = quote! {
-        impl Upgradable for #name {
+        impl UpgradableEnum for #name {
             type Latest = #latest_variant_ty;
             fn upgrade_to_latest(self) -> Self::Latest {
                 match self {

@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
-use serde_versioning_derive::UpgradableEnum;
+use versioning_derive::UpgradableEnum;
 
 pub trait Upgrade<To> {
     fn upgrade(self) -> To;
 }
 
-pub trait Upgradable {
+pub trait UpgradableEnum {
     type Latest;
     fn upgrade_to_latest(self) -> Self::Latest;
 }

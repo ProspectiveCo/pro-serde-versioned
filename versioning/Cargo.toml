@@ -1,5 +1,5 @@
 [package]
-name = "serde-versioning"
+name = "versioning"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,4 +9,4 @@ edition = "2021"
 serde = { version = "1.0.59", features = ["derive"] }
 serde_json = { version = "1.0.59", features = ["raw_value"] }
 
-serde-versioning-derive = { path = "../versioning-derive" }
+versioning-derive = { path = "../versioning-derive" }
