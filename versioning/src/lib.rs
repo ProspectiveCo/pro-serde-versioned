@@ -36,6 +36,11 @@ pub enum MyStructVersion {
     V3(MyStructV3),
 }
 
+// TODO: Test multiple enums that break out v1, 2, 3, 4, 5, 6 into v1, 2, 3 and v4, 5, 6.
+// TODO: Do partial deserialization
+// TODO: Test fields that change shape (e.g. string to array, etc.)
+// TODO: Test renaming fields
+
 impl Upgrade<MyStructV2> for MyStructV1 {
     fn upgrade(self: MyStructV1) -> MyStructV2 {
         MyStructV2 {
