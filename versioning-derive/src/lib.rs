@@ -4,13 +4,19 @@ use std::collections::HashMap;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use serde::{Serialize, Deserialize};
-use syn::{Data, DeriveInput, Fields};
+use syn::{Data, DeriveInput, Fields, Ident, Result};
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct VersionedEnvelope<'a> {
-    version_number: usize,
-    data: &'a[u8]
+fn check_implements_trait(struct_name: &Ident, trait_name: &Ident) -> Result<()> {
+    let check_code = quote! {
+        const _: fn() = || {
+            fn assert_implements<T: #trait_name>() {}
+            assert_implements::<#struct_name>();
+        };
+    };
+
+    let check_code = check_code.to_string();
+    syn::parse_str::<syn::Expr>(check_code.as_str())?;
+    Ok(())
 }
 
 #[proc_macro_derive(UpgradableEnum, attributes(latest))]
