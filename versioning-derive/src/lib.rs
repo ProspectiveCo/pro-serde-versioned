@@ -4,7 +4,14 @@ use std::collections::HashMap;
 
 use proc_macro::TokenStream;
 use quote::quote;
+use serde::{Serialize, Deserialize};
 use syn::{Data, DeriveInput, Fields};
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct VersionedEnvelope<'a> {
+    version_number: usize,
+    data: &'a[u8]
+}
 
 #[proc_macro_derive(UpgradableEnum, attributes(latest))]
 pub fn upgradable_enum(input: TokenStream) -> TokenStream {

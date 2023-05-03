@@ -1,5 +1,6 @@
 [workspace]
 members = [
   "versioning",
-  "versioning-derive"
+  "versioning-derive",
+  "versioning-rmp"
 ]
