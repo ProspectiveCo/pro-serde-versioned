@@ -41,6 +41,10 @@ impl<'a> VersionedEnvelope<'a> {
     pub fn from_slice(data: &'a [u8]) -> Result<Self, rmp_serde::decode::Error> {
         rmp_serde::from_slice(data)
     }
+
+    pub fn to_vec(&self) -> Result<Vec<u8>, rmp_serde::encode::Error> {
+        rmp_serde::to_vec(self)
+    }
 }
 
 pub fn from_slice<'a, A>(data: &'a [u8]) -> Result<A, Box<dyn std::error::Error>>
@@ -56,8 +60,7 @@ where
     A: VersionedWrapper<'static>,
 {
     let envelope = data.to_versioned_envelope()?;
-    let mut buf = Vec::new();
-    rmp_serde::encode::write(&mut buf, &envelope)?;
+    let mut buf = envelope.to_vec()?;
     Ok(buf)
 }
 
