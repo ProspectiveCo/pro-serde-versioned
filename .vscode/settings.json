@@ -1,6 +1,0 @@
-{
-  "rust-analyzer.linkedProjects": [
-    "./versioning-rmp/Cargo.toml",
-    "./versioning-rmp/Cargo.toml"
-  ]
-}
