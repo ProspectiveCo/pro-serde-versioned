@@ -14,3 +14,4 @@ serde_json = { version = "1.0.59", features = ["raw_value"] }
 syn = { version = "2.0.15", features = ["extra-traits"] }
 quote = "1.0.26"
 proc-macro2 = "1.0.56"
+versioning = { path = "../versioning" }

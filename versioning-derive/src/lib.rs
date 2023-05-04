@@ -4,22 +4,75 @@ use std::collections::HashMap;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Fields, Ident, Result};
+use syn::{Data, DeriveInput, Fields};
 
-fn check_implements_trait(struct_name: &Ident, trait_name: &Ident) -> Result<()> {
-    let check_code = quote! {
-        const _: fn() = || {
-            fn assert_implements<T: #trait_name>() {}
-            assert_implements::<#struct_name>();
-        };
+#[proc_macro_derive(VersionedSerde)]
+pub fn versioned_serde(input: TokenStream) -> TokenStream {
+    let ast: DeriveInput = syn::parse(input).unwrap();
+    let name = &ast.ident;
+    let mut to_envelope_arms = Vec::new();
+    let mut from_envelope_arms = Vec::new();
+
+    let version_variants = get_version_variants(&ast);
+
+    for version_variant in version_variants.values() {
+        let version_number = version_variant.version_number;
+        let variant_ident = &version_variant.variant_ident;
+
+        let variant_ty = &version_variant.variant_ty;
+        to_envelope_arms.push(quote! {
+            #name::#variant_ident(value) => {
+                let mut struct_ser = #variant_ty::get_serializer();
+                value.serialize(&mut struct_ser)?;
+                Ok(VersionedEnvelope {
+                    version_number: #version_number,
+                    data: struct_ser.into_inner().into(),
+                })
+            }
+        });
+        from_envelope_arms.push(quote! {
+            #version_number => {
+                let mut struct_de = #variant_ty::get_deserializer(&envelope.data);
+                Ok(#name::#variant_ident(
+                    #variant_ty::deserialize(&mut struct_de)?,
+                ))
+            }
+        });
+    }
+
+    let from_match_arms = quote! {
+        match envelope.version_number {
+            #(#from_envelope_arms)*
+            _ => Err("Unknown version".into()),
+        }
     };
 
-    let check_code = check_code.to_string();
-    syn::parse_str::<syn::Expr>(check_code.as_str())?;
-    Ok(())
+    let to_match_arms = quote! {
+        match self {
+            #(#to_envelope_arms)*
+        }
+    };
+
+    let gen = quote! {
+        impl<'a> VersionedSerde<'a> for #name {
+            fn from_versioned_envelope(
+                envelope: VersionedEnvelope<'a>,
+            ) -> Result<Self, Box<dyn std::error::Error>> {
+                #from_match_arms
+            }
+
+            fn to_versioned_envelope(
+                &self,
+            ) -> Result<VersionedEnvelope<'a>, Box<dyn std::error::Error>> {
+                #to_match_arms
+            }
+        }
+    };
+
+    gen.into()
 }
 
-#[proc_macro_derive(UpgradableEnum, attributes(latest))]
+#[proc_macro_derive(UpgradableEnum)]
 pub fn upgradable_enum(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
     let name = &ast.ident;
@@ -40,7 +93,7 @@ pub fn upgradable_enum(input: TokenStream) -> TokenStream {
 
     let upgrade_match_arms = generate_upgrade_match_arms(&ast, version_variants);
 
-    // gen.into()
+
     let gen = quote! {
         impl UpgradableEnum for #name {
             type Latest = #latest_variant_ty;

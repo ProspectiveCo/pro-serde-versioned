@@ -7,9 +7,9 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "1.0.59", features = ["derive"] }
+rmp-serde = "1.1.1"
 
 
 [dev-dependencies]
 versioning-derive = { path = "../versioning-derive" }
 serde_json = { version = "1.0.59", features = ["raw_value"] }
-rmp-serde = "1.1.1"
