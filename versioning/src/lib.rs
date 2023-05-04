@@ -13,7 +13,7 @@ pub trait VersionedStructure<'a>: Serialize + Deserialize<'a> {
     fn get_serializer() -> Self::Serializer;
 }
 
-pub trait VersionedSerde<'a>: Sized {
+pub trait VersionedWrapper<'a>: Sized {
     fn from_versioned_envelope(
         envelope: VersionedEnvelope<'a>,
     ) -> Result<Self, Box<dyn std::error::Error>>;
@@ -45,7 +45,7 @@ impl<'a> VersionedEnvelope<'a> {
 
 pub fn from_slice<'a, A>(data: &'a [u8]) -> Result<A, Box<dyn std::error::Error>>
 where
-    A: VersionedSerde<'a>,
+    A: VersionedWrapper<'a>,
 {
     let envelope = VersionedEnvelope::from_slice(data)?;
     A::from_versioned_envelope(envelope)
@@ -53,7 +53,7 @@ where
 
 pub fn to_vec<A>(data: &A) -> Result<Vec<u8>, Box<dyn std::error::Error>>
 where
-    A: VersionedSerde<'static>,
+    A: VersionedWrapper<'static>,
 {
     let envelope = data.to_versioned_envelope()?;
     let mut buf = Vec::new();
@@ -67,7 +67,7 @@ mod tests {
 
     use rmp_serde::decode::ReadRefReader;
     use serde_json::de::SliceRead;
-    use versioning_derive::{UpgradableEnum, VersionedSerde};
+    use versioning_derive::{UpgradableEnum, VersionedWrapper};
 
     #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
     pub struct MyStructV1 {
@@ -87,7 +87,7 @@ mod tests {
         second_new_field: String,
     }
 
-    #[derive(Debug, PartialEq, UpgradableEnum, VersionedSerde)]
+    #[derive(Debug, PartialEq, UpgradableEnum, VersionedWrapper)]
     pub enum MyStructVersion {
         V1(MyStructV1),
         V2(MyStructV2),

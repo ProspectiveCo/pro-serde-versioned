@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields};
 
-#[proc_macro_derive(VersionedSerde)]
+#[proc_macro_derive(VersionedWrapper)]
 pub fn versioned_serde(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
     let name = &ast.ident;
@@ -54,7 +54,7 @@ pub fn versioned_serde(input: TokenStream) -> TokenStream {
     };
 
     let gen = quote! {
-        impl<'a> VersionedSerde<'a> for #name {
+        impl<'a> VersionedWrapper<'a> for #name {
             fn from_versioned_envelope(
                 envelope: VersionedEnvelope<'a>,
             ) -> Result<Self, Box<dyn std::error::Error>> {

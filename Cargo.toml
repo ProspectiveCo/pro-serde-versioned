@@ -2,5 +2,4 @@
 members = [
   "versioning",
   "versioning-derive",
-  "versioning-rmp"
 ]
