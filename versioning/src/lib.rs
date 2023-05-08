@@ -32,26 +32,35 @@ impl Into<usize> for VersionNumber {
     }
 }
 
-pub trait VersionedWrapper<'a, Format: VersionedSerde<'a>>: Sized + Clone {
-    fn from_versioned_envelope(
-        envelope: VersionedEnvelope<Format>,
-    ) -> Result<Self, Box<dyn std::error::Error>>;
+pub trait VersionedWrapper<'a, Format: VersionedSerde<'a>>: VersionedWrapperSer<'a, Format> + VersionedWrapperDe<'a, Format> {}
 
+impl <'a, Format: VersionedSerde<'a>, T: VersionedWrapperSer<'a, Format> + VersionedWrapperDe<'a, Format>> VersionedWrapper<'a, Format> for T {}
+
+pub trait VersionedWrapperSer<'a, Format: VersionedSerde<'a>>: Sized + Clone {
     fn to_versioned_envelope(
         &self,
     ) -> Result<VersionedEnvelope<Format>, Box<dyn std::error::Error>>;
-
-    fn deserialize(data: Format) -> Result<Self, Box<dyn std::error::Error>> {
-        let envelope = Format::versioned_deserialize(data)?;
-        Self::from_versioned_envelope(envelope)
-    }
 
     fn serialize(&self) -> Result<Format, Box<dyn std::error::Error>> {
         Format::versioned_serialize(self.to_versioned_envelope()?)
     }
 }
 
+pub trait VersionedWrapperDe<'a, Format: VersionedSerde<'a>>: Sized + Clone {
+    fn from_versioned_envelope(
+        envelope: VersionedEnvelope<Format>,
+    ) -> Result<Self, Box<dyn std::error::Error>>;
+
+    fn deserialize(data: Format) -> Result<Self, Box<dyn std::error::Error>> {
+        let envelope = Format::versioned_deserialize(data)?;
+        Self::from_versioned_envelope(envelope)
+    }
+}
+
+
 pub trait VersionedSerde<'a>: VersionedSer + VersionedDe<'a> {}
+
+impl <'a, T: VersionedSer + VersionedDe<'a>> VersionedSerde<'a> for T {}
 
 pub trait VersionedSer: Sized {
     fn versioned_serialize(
@@ -98,8 +107,6 @@ impl<'a> VersionedDe<'a> for MsgPackBytes<'a> {
     }
 }
 
-impl<'a> VersionedSerde<'a> for MsgPackBytes<'a> {}
-
 impl VersionedSer for serde_json::Value {
     fn versioned_serialize(
         data: VersionedEnvelope<Self>,
@@ -113,8 +120,6 @@ impl VersionedDe<'_> for serde_json::Value {
         Ok(serde_json::from_value(self.clone())?)
     }
 }
-
-impl VersionedSerde<'_> for serde_json::Value {}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct VersionedEnvelope<T> {
@@ -153,7 +158,7 @@ mod tests {
         V3(MyStructV3),
     }
 
-    impl<'a> VersionedWrapper<'a, MsgPackBytes<'a>> for MyStructVersion {
+    impl<'a> VersionedWrapperDe<'a, MsgPackBytes<'a>> for MyStructVersion {
         fn from_versioned_envelope(
             envelope: VersionedEnvelope<MsgPackBytes<'a>>,
         ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -170,7 +175,9 @@ mod tests {
                 _ => Err("Unknown version".into()),
             }
         }
+    }
 
+    impl<'a> VersionedWrapperSer<'a, MsgPackBytes<'a>> for MyStructVersion {
         fn to_versioned_envelope(
             &self,
         ) -> Result<VersionedEnvelope<MsgPackBytes<'a>>, Box<dyn std::error::Error>> {
@@ -203,24 +210,7 @@ mod tests {
         }
     }
 
-    impl VersionedWrapper<'_, serde_json::Value> for MyStructVersion {
-        fn from_versioned_envelope(
-            envelope: VersionedEnvelope<serde_json::Value>,
-        ) -> Result<Self, Box<dyn std::error::Error>> {
-            match envelope.version_number.0 {
-                1 => Ok(MyStructVersion::V1(serde_json::from_slice(
-                    &envelope.data.to_string().as_bytes(),
-                )?)),
-                2 => Ok(MyStructVersion::V2(serde_json::from_slice(
-                    &envelope.data.to_string().as_bytes(),
-                )?)),
-                3 => Ok(MyStructVersion::V3(serde_json::from_slice(
-                    &envelope.data.to_string().as_bytes(),
-                )?)),
-                _ => Err("Unknown version".into()),
-            }
-        }
-
+    impl VersionedWrapperSer<'_, serde_json::Value> for MyStructVersion {
         fn to_versioned_envelope(
             &self,
         ) -> Result<VersionedEnvelope<serde_json::Value>, Box<dyn std::error::Error>> {
@@ -239,6 +229,26 @@ mod tests {
                 }),
             }
         }
+    }
+
+    impl VersionedWrapperDe<'_, serde_json::Value> for MyStructVersion {
+        fn from_versioned_envelope(
+            envelope: VersionedEnvelope<serde_json::Value>,
+        ) -> Result<Self, Box<dyn std::error::Error>> {
+            match envelope.version_number.0 {
+                1 => Ok(MyStructVersion::V1(serde_json::from_slice(
+                    &envelope.data.to_string().as_bytes(),
+                )?)),
+                2 => Ok(MyStructVersion::V2(serde_json::from_slice(
+                    &envelope.data.to_string().as_bytes(),
+                )?)),
+                3 => Ok(MyStructVersion::V3(serde_json::from_slice(
+                    &envelope.data.to_string().as_bytes(),
+                )?)),
+                _ => Err("Unknown version".into()),
+            }
+        }
+
     }
 
     impl Upgrade<MyStructV2> for MyStructV1 {
