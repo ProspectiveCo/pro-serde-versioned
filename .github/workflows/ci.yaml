@@ -51,9 +51,10 @@ jobs:
               run: cargo test --verbose --target ${{ matrix.rust_target }}
               env:
                   CARGO_INCREMENTAL: "0"
-                  RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests"
-                  RUSTDOCFLAGS: "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests"
+                  RUSTFLAGS: ${{ matrix.rust_target == 'x86_64-unknown-linux-gnu' && '-Zprofile -Cinstrument-coverage -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests' || '' }}
+                  RUSTDOCFLAGS: ${{ matrix.rust_target == 'x86_64-unknown-linux-gnu' && '-Zprofile -Cinstrument-coverage -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests' || '' }}
             - name: rust-grcov
+              if: matrix.rust_target == 'x86_64-unknown-linux-gnu'
               id: rs-cov
               uses: actions-rs/grcov@v0.1.5
             # Needs to be public first
