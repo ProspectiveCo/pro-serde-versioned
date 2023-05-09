@@ -1,0 +1,61 @@
+#  ┌───────────────────────────────────────────────────────────────────────────┐
+#  │                                                                           │
+#  │  ██████╗ ██████╗  ██████╗   Copyright (C) 2022, The Prospective Company   │
+#  │  ██╔══██╗██╔══██╗██╔═══██╗                                                │
+#  │  ██████╔╝██████╔╝██║   ██║  This file is part of the Procss library,      │
+#  │  ██╔═══╝ ██╔══██╗██║   ██║  distributed under the terms of the            │
+#  │  ██║     ██║  ██║╚██████╔╝  Apache License 2.0.  The full license can     │
+#  │  ╚═╝     ╚═╝  ╚═╝ ╚═════╝   be found in the LICENSE file.                 │
+#  │                                                                           │
+#  └───────────────────────────────────────────────────────────────────────────┘
+
+name: CI
+
+on:
+    push:
+        branches: ["main"]
+    pull_request:
+        branches: ["*"]
+    workflow_dispatch: {}
+
+env:
+    CARGO_TERM_COLOR: always
+
+jobs:
+    build:
+        strategy:
+            matrix:
+                os: [ubuntu-20.04]
+                rust_toolchain: [stable, nightly-2022-10-24]
+                rust_target: [x86_64-unknown-linux-gnu, wasm32-unknown-unknown]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v3
+            - uses: actions-rs/toolchain@v1
+              with:
+                  toolchain: ${{ matrix.rust_toolchain }}
+                  override: true
+
+            - uses: Swatinem/rust-cache@v2
+            #   with:
+            # The cargo workspaces and target directory configuration.
+            # These entries are separated by newlines and have the form
+            # `$workspace -> $target`. The `$target` part is treated as a directory
+            # relative to the `$workspace` and defaults to "target" if not explicitly given.
+            # default: ". -> target"
+            #   workspaces: ""
+            - name: Build
+              run: cargo build --verbose --target ${{ matrix.rust_target }}
+            - name: Run tests
+              run: cargo test --verbose --target ${{ matrix.rust_target }}
+              env:
+                  CARGO_INCREMENTAL: "0"
+                  RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests"
+                  RUSTDOCFLAGS: "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests"
+            - name: rust-grcov
+              uses: actions-rs/grcov@v0.1.5
+            - name: Codecov
+              uses: codecov/codecov-action@v3.1.0
+              with:
+                  verbose: true
+                  fail_ci_if_error: true
