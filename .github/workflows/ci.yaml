@@ -27,15 +27,14 @@ jobs:
             matrix:
                 os: [ubuntu-20.04]
                 rust_toolchain: [nightly-2022-10-24, nightly-2023-05-09]
-                rust_target: [x86_64-unknown-linux-gnu]
-                # TODO: Fix WASM target
-                # rust_target: [x86_64-unknown-linux-gnu, wasm32-wasi]
+                rust_target: [x86_64-unknown-linux-gnu, wasm32-wasi]
         runs-on: ${{ matrix.os }}
         steps:
             - uses: actions/checkout@v3
             - uses: actions-rs/toolchain@v1
               with:
                   toolchain: ${{ matrix.rust_toolchain }}
+                  target: ${{ matrix.rust_target }}
                   override: true
 
             - uses: Swatinem/rust-cache@v2
@@ -52,8 +51,8 @@ jobs:
               run: cargo test --verbose --target ${{ matrix.rust_target }}
               env:
                   CARGO_INCREMENTAL: "0"
-                  RUSTFLAGS: "-Zprofile -Cinstrument-coverage -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests"
-                  RUSTDOCFLAGS: "-Zprofile -Cinstrument-coverage -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests"
+                  RUSTFLAGS: "-Zprofile -Cinstrument-coverage=all -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests"
+                  RUSTDOCFLAGS: "-Zprofile -Cinstrument-coverage=all -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests"
             - name: rust-grcov
               id: rs-cov
               uses: actions-rs/grcov@v0.1.5
