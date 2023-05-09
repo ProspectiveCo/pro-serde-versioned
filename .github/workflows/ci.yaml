@@ -47,8 +47,19 @@ jobs:
             #   workspaces: ""
             - name: Build
               run: cargo build --verbose --target ${{ matrix.rust_target }}
+            - name: Install cargo-wasi
+              if: matrix.rust_target == 'wasm32-wasi'
+              run: cargo install cargo-wasi
+            - name: Install wasmtime
+              if: matrix.rust_target == 'wasm32-wasi'
+              run: curl https://wasmtime.dev/install.sh -sSf | bash
             - name: Run tests
-              run: cargo test --verbose --target ${{ matrix.rust_target }}
+              run: |
+                  if [ "${{ matrix.rust_target }}" == "wasm32-wasi" ]; then
+                      cargo wasi test --verbose --target ${{ matrix.rust_target }}
+                  else
+                      cargo test --verbose --target ${{ matrix.rust_target }}
+                  fi
               env:
                   CARGO_INCREMENTAL: "0"
                   RUSTFLAGS: ${{ matrix.rust_target == 'x86_64-unknown-linux-gnu' && '-Zprofile -Cinstrument-coverage -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests' || '' }}
