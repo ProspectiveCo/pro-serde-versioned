@@ -131,7 +131,7 @@ pub struct VersionedEnvelope<T> {
 mod tests {
     use super::*;
 
-    use versioning_derive::UpgradableEnum;
+    use versioning_derive::{UpgradableEnum, VersionedWrapper};
 
     #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
     pub struct MyStructV1 {
@@ -151,104 +151,12 @@ mod tests {
         second_new_field: String,
     }
 
-    #[derive(Debug, PartialEq, UpgradableEnum, Clone)]
+    #[derive(Debug, PartialEq, UpgradableEnum, VersionedWrapper, Clone)]
+    #[versioned_wrapper(formats(msgpack, json))]
     pub enum MyStructVersion {
         V1(MyStructV1),
         V2(MyStructV2),
         V3(MyStructV3),
-    }
-
-    impl<'a> VersionedWrapperDe<'a, MsgPackBytes<'a>> for MyStructVersion {
-        fn from_versioned_envelope(
-            envelope: VersionedEnvelope<MsgPackBytes<'a>>,
-        ) -> Result<Self, Box<dyn std::error::Error>> {
-            match envelope.version_number.0 {
-                1 => Ok(MyStructVersion::V1(rmp_serde::from_slice(
-                    &envelope.data.0,
-                )?)),
-                2 => Ok(MyStructVersion::V2(rmp_serde::from_slice(
-                    &envelope.data.0,
-                )?)),
-                3 => Ok(MyStructVersion::V3(rmp_serde::from_slice(
-                    &envelope.data.0,
-                )?)),
-                _ => Err("Unknown version".into()),
-            }
-        }
-    }
-
-    impl<'a> VersionedWrapperSer<'a, MsgPackBytes<'a>> for MyStructVersion {
-        fn to_versioned_envelope(
-            &self,
-        ) -> Result<VersionedEnvelope<MsgPackBytes<'a>>, Box<dyn std::error::Error>> {
-            match self {
-                MyStructVersion::V1(value) => {
-                    let mut struct_ser = rmp_serde::Serializer::new(Vec::new());
-                    value.serialize(&mut struct_ser)?;
-                    Ok(VersionedEnvelope {
-                        version_number: 1.into(),
-                        data: MsgPackBytes(Cow::Owned(struct_ser.into_inner().to_owned())),
-                    })
-                }
-                MyStructVersion::V2(value) => {
-                    let mut struct_ser = rmp_serde::Serializer::new(Vec::new());
-                    value.serialize(&mut struct_ser)?;
-                    Ok(VersionedEnvelope {
-                        version_number: 2.into(),
-                        data: MsgPackBytes(Cow::Owned(struct_ser.into_inner().to_owned())),
-                    })
-                }
-                MyStructVersion::V3(value) => {
-                    let mut struct_ser = rmp_serde::Serializer::new(Vec::new());
-                    value.serialize(&mut struct_ser)?;
-                    Ok(VersionedEnvelope {
-                        version_number: 3.into(),
-                        data: MsgPackBytes(Cow::Owned(struct_ser.into_inner().to_owned())),
-                    })
-                }
-            }
-        }
-    }
-
-    impl VersionedWrapperSer<'_, serde_json::Value> for MyStructVersion {
-        fn to_versioned_envelope(
-            &self,
-        ) -> Result<VersionedEnvelope<serde_json::Value>, Box<dyn std::error::Error>> {
-            match &self {
-                MyStructVersion::V1(value) => Ok(VersionedEnvelope {
-                    version_number: 1.into(),
-                    data: serde_json::to_value(value)?,
-                }),
-                MyStructVersion::V2(value) => Ok(VersionedEnvelope {
-                    version_number: 2.into(),
-                    data: serde_json::to_value(value)?,
-                }),
-                MyStructVersion::V3(value) => Ok(VersionedEnvelope {
-                    version_number: 3.into(),
-                    data: serde_json::to_value(value)?,
-                }),
-            }
-        }
-    }
-
-    impl VersionedWrapperDe<'_, serde_json::Value> for MyStructVersion {
-        fn from_versioned_envelope(
-            envelope: VersionedEnvelope<serde_json::Value>,
-        ) -> Result<Self, Box<dyn std::error::Error>> {
-            match envelope.version_number.0 {
-                1 => Ok(MyStructVersion::V1(serde_json::from_slice(
-                    &envelope.data.to_string().as_bytes(),
-                )?)),
-                2 => Ok(MyStructVersion::V2(serde_json::from_slice(
-                    &envelope.data.to_string().as_bytes(),
-                )?)),
-                3 => Ok(MyStructVersion::V3(serde_json::from_slice(
-                    &envelope.data.to_string().as_bytes(),
-                )?)),
-                _ => Err("Unknown version".into()),
-            }
-        }
-
     }
 
     impl Upgrade<MyStructV2> for MyStructV1 {
@@ -278,6 +186,9 @@ mod tests {
     fn test_json_serde() -> Result<(), Box<dyn std::error::Error>> {
         let value: serde_json::Value = serde_json::from_str(V1_STRUCT)?;
 
+        // let foo = value.versioned_deserialize()?;
+        // let bar = MyStructVersion::from_versioned_envelope(foo)?;
+
         let wrapper: MyStructVersion = MyStructVersion::deserialize(value.clone())?;
 
         assert_eq!(
@@ -300,9 +211,16 @@ mod tests {
         let versioned_struct: MyStructVersion = MyStructVersion::deserialize(json_value)?;
         let serialized_wrapper: MsgPackBytes = MyStructVersion::serialize(&versioned_struct)?;
 
+        // We want this to be a borrow so that the msgpack deserialize is zero copy
+        let serialized_wrapper = serialized_wrapper.0.as_ref().into();
+
+        assert!(match serialized_wrapper {
+            Cow::Borrowed(_) => true,
+            Cow::Owned(_) => false,
+        });
+
         let hex = 
             serialized_wrapper
-                .0
                 .iter()
                 .map(|b| format!("{:02x}", b))
                 .collect::<Vec<_>>()
@@ -314,8 +232,9 @@ mod tests {
         );
 
         // Asserting that serializer is symmetric
-        let _: MyStructVersion = MyStructVersion::deserialize(serialized_wrapper)?;
+        let _: MyStructVersion = MyStructVersion::deserialize(MsgPackBytes(serialized_wrapper))?;
 
         Ok(())
     }
+
 }
