@@ -52,7 +52,9 @@ jobs:
               run: cargo install cargo-wasi
             - name: Install wasmtime
               if: matrix.rust_target == 'wasm32-wasi'
-              run: curl https://wasmtime.dev/install.sh -sSf | bash
+              run: |
+                  curl https://wasmtime.dev/install.sh -sSf | bash
+                  echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
             - name: Run tests
               run: |
                   if [ "${{ matrix.rust_target }}" == "wasm32-wasi" ]; then
