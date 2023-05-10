@@ -31,20 +31,12 @@ jobs:
         runs-on: ${{ matrix.os }}
         steps:
             - uses: actions/checkout@v3
+            - uses: Swatinem/rust-cache@v2
             - uses: actions-rs/toolchain@v1
               with:
                   toolchain: ${{ matrix.rust_toolchain }}
                   target: ${{ matrix.rust_target }}
                   override: true
-
-            - uses: Swatinem/rust-cache@v2
-            #   with:
-            # The cargo workspaces and target directory configuration.
-            # These entries are separated by newlines and have the form
-            # `$workspace -> $target`. The `$target` part is treated as a directory
-            # relative to the `$workspace` and defaults to "target" if not explicitly given.
-            # default: ". -> target"
-            #   workspaces: ""
             - name: Build
               run: cargo build --verbose --target ${{ matrix.rust_target }}
             - name: Install cargo-wasi
