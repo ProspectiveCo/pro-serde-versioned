@@ -3,13 +3,17 @@ name = "versioning"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["serde-rmp", "serde-json"]
+serde-rmp = ["dep:rmp-serde"]
+serde-json = ["dep:serde_json"]
+
 
 [dependencies]
 serde = { version = "1.0", default-features = false }
 serde_derive = "1.0"
-serde_json = { version = "1.0", features = ["raw_value"] }
-rmp-serde = "1.1.1"
+serde_json = { version = "1.0", features = ["raw_value"], optional = true }
+rmp-serde = { version = "1.1.1", optional = true }
 serde_bytes = "0.11.9"
 
 [dev-dependencies]
