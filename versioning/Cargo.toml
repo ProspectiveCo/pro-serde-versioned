@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["serde-rmp", "serde-json"]
-serde-rmp = ["dep:rmp-serde"]
-serde-json = ["dep:serde_json"]
+default = ["serde_rmp", "serde_json"]
+serde_rmp = ["dep:rmp-serde"]
+serde_json = ["dep:serde_json"]
 
 
 [dependencies]
