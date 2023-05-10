@@ -39,8 +39,12 @@ pub fn versioned_serialize(input: TokenStream) -> TokenStream {
         .map(|version_variant| version_variant.version_number)
         .collect();
 
+    let generics = ast.generics;
+
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
     quote! {
-        impl VersionedSerialize for #name {
+        impl #impl_generics #name #ty_generics #where_clause {
             fn serialize<F: SerializeFormat>(&self) -> Result<F, Box<dyn std::error::Error>> {
                 let envelope: Result<VersionedEnvelope<F>, Box<dyn std::error::Error>> = match self {
                     #(
@@ -76,8 +80,11 @@ pub fn versioned_deserialize(input: TokenStream) -> TokenStream {
         .map(|version_variant| version_variant.version_number)
         .collect();
 
+    let generics = ast.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
     quote! {
-        impl VersionedDeserialize for #name {
+        impl #impl_generics #name #ty_generics #where_clause {
             fn deserialize<'a, F: DeserializeFormat + Deserialize<'a>>(
                 data: &'a F,
             ) -> Result<Self, Box<dyn std::error::Error>> {
@@ -119,8 +126,11 @@ pub fn upgradable_enum(input: TokenStream) -> TokenStream {
 
     let upgrade_match_arms = generate_upgrade_match_arms(&ast, version_variants);
 
+    let generics = ast.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
     let gen = quote! {
-        impl UpgradableEnum for #name {
+        impl #impl_generics UpgradableEnum for #name #ty_generics #where_clause {
             type Latest = #latest_variant_ty;
             fn upgrade_to_latest(self) -> Self::Latest {
                 match self {
