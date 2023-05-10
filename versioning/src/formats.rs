@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use serde::{Serialize, Deserialize};
+use serde_derive::{Serialize, Deserialize};
 
 use crate::{SerializeFormat, DeserializeFormat};
 
