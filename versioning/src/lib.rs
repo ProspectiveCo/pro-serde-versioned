@@ -11,7 +11,6 @@
 #![doc = include_str!("../../README.md")]
 
 use serde::{Deserialize, Serialize};
-use serde_derive::{Serialize, Deserialize};
 
 /// Derivable trait used to chain upgrade a versioned wrapper to the latest version of a structure (e.g. v1 -> v2 -> ... -> latest)
 pub trait UpgradableEnum {
@@ -63,6 +62,9 @@ pub struct VersionedEnvelope<T> {
 }
 
 pub mod formats;
+
+#[cfg(feature = "derive")]
+pub use versioning_derive::{UpgradableEnum, VersionedDeserialize, VersionedSerialize};
 
 #[cfg(test)]
 mod tests {

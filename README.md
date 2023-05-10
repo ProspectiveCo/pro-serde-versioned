@@ -13,9 +13,7 @@ Here's an example of how to use this library with a simple structure that has tw
 
 ```rust
 use serde::{Deserialize, Serialize};
-use serde_derive::{Deserialize, Serialize};
 use versioning::*;
-use versioning_derive::{UpgradableEnum, VersionedDeserialize, VersionedSerialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct MyStructV1 {
