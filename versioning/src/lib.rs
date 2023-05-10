@@ -124,9 +124,6 @@ mod tests {
     fn test_json_serde() -> Result<(), Box<dyn std::error::Error>> {
         let value: serde_json::Value = serde_json::from_str(V1_STRUCT)?;
 
-        // let foo = value.versioned_deserialize()?;
-        // let bar = MyStructVersion::from_versioned_envelope(foo)?;
-
         let wrapper: MyStructVersion = MyStructVersion::deserialize(&value)?;
 
         assert_eq!(
@@ -167,6 +164,122 @@ mod tests {
 
         // Asserting that serializer is symmetric
         let _: MyStructVersion = MyStructVersion::deserialize(&MsgPackBytes(serialized_wrapper))?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_change_field_representation() -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct MyStructV1 {
+            field1: String,
+        }
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct MyStructV2 {
+            field1: Vec<u8>,
+        }
+
+        impl Upgrade<MyStructV2> for MyStructV1 {
+            fn upgrade(self: MyStructV1) -> MyStructV2 {
+                MyStructV2 {
+                    field1: self.field1.into_bytes(),
+                }
+            }
+        }
+
+        #[derive(Debug, PartialEq, UpgradableEnum, VersionedSerialize, VersionedDeserialize, Clone)]
+        enum MyStructVersion {
+            V1(MyStructV1),
+            V2(MyStructV2),
+        }
+
+        let v1_struct = MyStructVersion::V1(MyStructV1 {
+            field1: "value1".to_string(),
+        });
+
+        let serialized_wrapper: serde_json::Value = MyStructVersion::serialize(&v1_struct)?;
+
+        assert_eq!(
+            serialized_wrapper,
+            serde_json::json!({
+                "version_number": 1,
+                "data": {
+                    "field1": "value1"
+                }
+            })
+        );
+
+        let v2_struct = MyStructVersion::deserialize(&serialized_wrapper)?.upgrade_to_latest();
+
+        assert_eq!(
+            v2_struct,
+            MyStructV2 {
+                field1: "value1".to_string().into_bytes()
+            }
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_remove_field() -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct MyStructV1 {
+            field1: String,
+            field2: String,
+        }
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct MyStructV2 {
+            field1: String,
+        }
+
+        impl Upgrade<MyStructV2> for MyStructV1 {
+            fn upgrade(self: MyStructV1) -> MyStructV2 {
+                MyStructV2 {
+                    field1: self.field1,
+                }
+            }
+        }
+
+        #[derive(Debug, PartialEq, UpgradableEnum, VersionedSerialize, VersionedDeserialize, Clone)]
+        enum MyStructVersion {
+            V1(MyStructV1),
+            V2(MyStructV2),
+        }
+
+        let v1_struct = MyStructVersion::V1(MyStructV1 {
+            field1: "value1".to_string(),
+            field2: "value2".to_string(),
+        });
+
+        let serialized_wrapper: serde_json::Value = MyStructVersion::serialize(&v1_struct)?;
+
+        assert_eq!(
+            serialized_wrapper,
+            serde_json::json!({
+                "version_number": 1,
+                "data": {
+                    "field1": "value1",
+                    "field2": "value2"
+                }
+            })
+        );
+
+        let v2_struct = MyStructVersion::deserialize(&serialized_wrapper)?.upgrade_to_latest();
+
+        let v2_serialized: serde_json::Value = MyStructVersion::V2(v2_struct).serialize()?;
+
+        assert_eq!(
+            v2_serialized,
+            serde_json::json!({
+                "version_number": 2,
+                "data": {
+                    "field1": "value1"
+                }
+            })
+        );
 
         Ok(())
     }
