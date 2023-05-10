@@ -1,4 +1,13 @@
-use std::borrow::Cow;
+// ┌───────────────────────────────────────────────────────────────────────────┐
+// │                                                                           │
+// │  ██████╗ ██████╗  ██████╗   Copyright (C) The Prospective Company         │
+// │  ██╔══██╗██╔══██╗██╔═══██╗  All Rights Reserved - April 2022              │
+// │  ██████╔╝██████╔╝██║   ██║                                                │
+// │  ██╔═══╝ ██╔══██╗██║   ██║  Proprietary and confidential. Unauthorized    │
+// │  ██║     ██║  ██║╚██████╔╝  copying of this file, via any medium is       │
+// │  ╚═╝     ╚═╝  ╚═╝ ╚═════╝   strictly prohibited.                          │
+// │                                                                           │
+// └───────────────────────────────────────────────────────────────────────────┘
 
 use serde::{Deserialize, Serialize};
 
@@ -11,119 +20,33 @@ pub trait Upgrade<To> {
     fn upgrade(self) -> To;
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct VersionNumber(usize);
-
-impl Default for VersionNumber {
-    fn default() -> Self {
-        Self(1)
-    }
+pub trait VersionedSerialize {
+    fn serialize<F>(&self) -> Result<F, Box<dyn std::error::Error>>
+    where
+        F: SerializeFormat;
 }
 
-impl From<usize> for VersionNumber {
-    fn from(version_number: usize) -> Self {
-        Self(version_number)
-    }
+pub trait VersionedDeserialize: Sized + Clone {
+    fn deserialize<'a, F>(data: &'a F) -> Result<Self, Box<dyn std::error::Error>>
+    where
+        F: DeserializeFormat + Deserialize<'a>;
 }
 
-impl Into<usize> for VersionNumber {
-    fn into(self) -> usize {
-        self.0
-    }
+pub trait SerializeFormat: Sized + Serialize {
+    fn versioned_serialize<T>(data: T) -> Result<Self, Box<dyn std::error::Error>>
+    where
+        T: Serialize;
 }
 
-pub trait VersionedWrapper<'a, Format: VersionedSerde<'a>>: VersionedWrapperSer<'a, Format> + VersionedWrapperDe<'a, Format> {}
-
-impl <'a, Format: VersionedSerde<'a>, T: VersionedWrapperSer<'a, Format> + VersionedWrapperDe<'a, Format>> VersionedWrapper<'a, Format> for T {}
-
-pub trait VersionedWrapperSer<'a, Format: VersionedSerde<'a>>: Sized + Clone {
-    fn to_versioned_envelope(
-        &self,
-    ) -> Result<VersionedEnvelope<Format>, Box<dyn std::error::Error>>;
-
-    fn serialize(&self) -> Result<Format, Box<dyn std::error::Error>> {
-        Format::versioned_serialize(self.to_versioned_envelope()?)
-    }
-}
-
-pub trait VersionedWrapperDe<'a, Format: VersionedSerde<'a>>: Sized + Clone {
-    fn from_versioned_envelope(
-        envelope: VersionedEnvelope<Format>,
-    ) -> Result<Self, Box<dyn std::error::Error>>;
-
-    fn deserialize(data: Format) -> Result<Self, Box<dyn std::error::Error>> {
-        let envelope = Format::versioned_deserialize(data)?;
-        Self::from_versioned_envelope(envelope)
-    }
-}
-
-
-pub trait VersionedSerde<'a>: VersionedSer + VersionedDe<'a> {}
-
-impl <'a, T: VersionedSer + VersionedDe<'a>> VersionedSerde<'a> for T {}
-
-pub trait VersionedSer: Sized {
-    fn versioned_serialize(
-        data: VersionedEnvelope<Self>,
-    ) -> Result<Self, Box<dyn std::error::Error>>;
-}
-
-pub trait VersionedDe<'a>: Sized {
-    fn versioned_deserialize(self) -> Result<VersionedEnvelope<Self>, Box<dyn std::error::Error>>;
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct MsgPackBytes<'a>(
-    #[serde(with = "serde_bytes")]
-    #[serde(borrow)]
-    Cow<'a, [u8]>,
-);
-
-impl VersionedSer for MsgPackBytes<'_> {
-    fn versioned_serialize(
-        data: VersionedEnvelope<Self>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(MsgPackBytes(Cow::Owned(rmp_serde::to_vec(&data)?)))
-    }
-}
-
-impl<'a> VersionedDe<'a> for MsgPackBytes<'a> {
-    fn versioned_deserialize(self) -> Result<VersionedEnvelope<Self>, Box<dyn std::error::Error>> {
-        match self.0 {
-            Cow::Borrowed(bytes) => Ok(rmp_serde::from_slice(bytes)?),
-            Cow::Owned(bytes) => {
-                let borrowed_envelope: VersionedEnvelope<MsgPackBytes<'_>> =
-                    rmp_serde::from_slice(&bytes)?;
-                let owned: VersionedEnvelope<Self> = VersionedEnvelope {
-                    version_number: borrowed_envelope.version_number,
-                    data: MsgPackBytes(match borrowed_envelope.data.0 {
-                        Cow::Borrowed(bytes) => Cow::Owned(bytes.to_vec()),
-                        Cow::Owned(bytes) => Cow::Owned(bytes),
-                    }),
-                };
-                Ok(owned)
-            }
-        }
-    }
-}
-
-impl VersionedSer for serde_json::Value {
-    fn versioned_serialize(
-        data: VersionedEnvelope<Self>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        Ok(serde_json::to_value(&data)?)
-    }
-}
-
-impl VersionedDe<'_> for serde_json::Value {
-    fn versioned_deserialize(self) -> Result<VersionedEnvelope<Self>, Box<dyn std::error::Error>> {
-        Ok(serde_json::from_value(self.clone())?)
-    }
+pub trait DeserializeFormat: Sized {
+    fn versioned_deserialize<'a, T>(&'a self) -> Result<T, Box<dyn std::error::Error>>
+    where
+        T: Deserialize<'a>;
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct VersionedEnvelope<T> {
-    version_number: VersionNumber,
+    version_number: usize,
     data: T,
 }
 
@@ -131,7 +54,48 @@ pub struct VersionedEnvelope<T> {
 mod tests {
     use super::*;
 
-    use versioning_derive::{UpgradableEnum, VersionedWrapper};
+    use std::borrow::Cow;
+
+    use versioning_derive::{UpgradableEnum, VersionedDeserialize, VersionedSerialize};
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+    pub struct MsgPackBytes<'a>(
+        #[serde(with = "serde_bytes")]
+        #[serde(borrow)]
+        Cow<'a, [u8]>,
+    );
+
+    impl SerializeFormat for MsgPackBytes<'_> {
+        fn versioned_serialize<T: Serialize>(data: T) -> Result<Self, Box<dyn std::error::Error>> {
+            Ok(MsgPackBytes(Cow::Owned(rmp_serde::to_vec(&data)?)))
+        }
+    }
+
+    impl<'a> DeserializeFormat for MsgPackBytes<'a> {
+        fn versioned_deserialize<'b, T: Deserialize<'b>>(
+            &'b self,
+        ) -> Result<T, Box<dyn std::error::Error>> {
+            match &self.0 {
+                Cow::Borrowed(bytes) => Ok(rmp_serde::from_slice(bytes)?),
+                Cow::Owned(bytes) => Ok(rmp_serde::from_slice(&bytes)?),
+            }
+        }
+    }
+
+    impl SerializeFormat for serde_json::Value {
+        fn versioned_serialize<T: Serialize>(data: T) -> Result<Self, Box<dyn std::error::Error>> {
+            Ok(serde_json::to_value(&data)?)
+        }
+    }
+
+    impl DeserializeFormat for serde_json::Value {
+        fn versioned_deserialize<'a, T>(&'a self) -> Result<T, Box<dyn std::error::Error>>
+        where
+            T: Deserialize<'a>,
+        {
+            Ok(T::deserialize(self.clone())?)
+        }
+    }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
     pub struct MyStructV1 {
@@ -151,8 +115,7 @@ mod tests {
         second_new_field: String,
     }
 
-    #[derive(Debug, PartialEq, UpgradableEnum, VersionedWrapper, Clone)]
-    #[versioned_wrapper(formats(msgpack, json))]
+    #[derive(Debug, PartialEq, UpgradableEnum, VersionedSerialize, VersionedDeserialize, Clone)]
     pub enum MyStructVersion {
         V1(MyStructV1),
         V2(MyStructV2),
@@ -189,7 +152,7 @@ mod tests {
         // let foo = value.versioned_deserialize()?;
         // let bar = MyStructVersion::from_versioned_envelope(foo)?;
 
-        let wrapper: MyStructVersion = MyStructVersion::deserialize(value.clone())?;
+        let wrapper: MyStructVersion = MyStructVersion::deserialize(&value)?;
 
         assert_eq!(
             wrapper,
@@ -208,7 +171,7 @@ mod tests {
     #[test]
     fn test_msgpack_serde() -> Result<(), Box<dyn std::error::Error>> {
         let json_value: serde_json::Value = serde_json::from_str(V1_STRUCT)?;
-        let versioned_struct: MyStructVersion = MyStructVersion::deserialize(json_value)?;
+        let versioned_struct: MyStructVersion = MyStructVersion::deserialize(&json_value)?;
         let serialized_wrapper: MsgPackBytes = MyStructVersion::serialize(&versioned_struct)?;
 
         // We want this to be a borrow so that the msgpack deserialize is zero copy
@@ -219,22 +182,17 @@ mod tests {
             Cow::Owned(_) => false,
         });
 
-        let hex = 
-            serialized_wrapper
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect::<Vec<_>>()
-                .join(" ");
+        let hex = serialized_wrapper
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
 
-        assert_eq!(
-            hex,
-            "92 01 c4 08 91 a6 76 61 6c 75 65 31"
-        );
+        assert_eq!(hex, "92 01 c4 08 91 a6 76 61 6c 75 65 31");
 
         // Asserting that serializer is symmetric
-        let _: MyStructVersion = MyStructVersion::deserialize(MsgPackBytes(serialized_wrapper))?;
+        let _: MyStructVersion = MyStructVersion::deserialize(&MsgPackBytes(serialized_wrapper))?;
 
         Ok(())
     }
-
 }
