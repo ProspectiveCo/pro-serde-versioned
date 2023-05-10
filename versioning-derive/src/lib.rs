@@ -1,5 +1,13 @@
-extern crate proc_macro;
-
+// ┌───────────────────────────────────────────────────────────────────────────┐
+// │                                                                           │
+// │  ██████╗ ██████╗  ██████╗   Copyright (C) The Prospective Company         │
+// │  ██╔══██╗██╔══██╗██╔═══██╗  All Rights Reserved - April 2022              │
+// │  ██████╔╝██████╔╝██║   ██║                                                │
+// │  ██╔═══╝ ██╔══██╗██║   ██║  Proprietary and confidential. Unauthorized    │
+// │  ██║     ██║  ██║╚██████╔╝  copying of this file, via any medium is       │
+// │  ╚═╝     ╚═╝  ╚═╝ ╚═════╝   strictly prohibited.                          │
+// │                                                                           │
+// └───────────────────────────────────────────────────────────────────────────┘
 use std::collections::HashMap;
 
 use proc_macro::TokenStream;

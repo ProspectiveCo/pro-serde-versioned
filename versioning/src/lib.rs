@@ -10,6 +10,8 @@
 // └───────────────────────────────────────────────────────────────────────────┘
 #![doc = include_str!("../../README.md")]
 
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 
 /// Derivable trait used to chain upgrade a versioned wrapper to the latest version of a structure (e.g. v1 -> v2 -> ... -> latest)
@@ -76,37 +78,36 @@ impl DeserializeFormat for serde_json::Value {
     }
 }
 
+/// Zero copy wrapper for MessagePack bytes stored as a [std::borrow::Cow] of bytes.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct MsgPackBytes<'a>(
+    #[serde(with = "serde_bytes")]
+    #[serde(borrow)]
+    Cow<'a, [u8]>,
+);
+
+impl SerializeFormat for MsgPackBytes<'_> {
+    fn versioned_serialize<T: Serialize>(data: T) -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(MsgPackBytes(Cow::Owned(rmp_serde::to_vec(&data)?)))
+    }
+}
+
+impl<'a> DeserializeFormat for MsgPackBytes<'a> {
+    fn versioned_deserialize<'b, T: Deserialize<'b>>(
+        &'b self,
+    ) -> Result<T, Box<dyn std::error::Error>> {
+        match &self.0 {
+            Cow::Borrowed(bytes) => Ok(rmp_serde::from_slice(bytes)?),
+            Cow::Owned(bytes) => Ok(rmp_serde::from_slice(&bytes)?),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use std::borrow::Cow;
-
     use versioning_derive::{UpgradableEnum, VersionedDeserialize, VersionedSerialize};
-
-    #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-    struct MsgPackBytes<'a>(
-        #[serde(with = "serde_bytes")]
-        #[serde(borrow)]
-        Cow<'a, [u8]>,
-    );
-
-    impl SerializeFormat for MsgPackBytes<'_> {
-        fn versioned_serialize<T: Serialize>(data: T) -> Result<Self, Box<dyn std::error::Error>> {
-            Ok(MsgPackBytes(Cow::Owned(rmp_serde::to_vec(&data)?)))
-        }
-    }
-
-    impl<'a> DeserializeFormat for MsgPackBytes<'a> {
-        fn versioned_deserialize<'b, T: Deserialize<'b>>(
-            &'b self,
-        ) -> Result<T, Box<dyn std::error::Error>> {
-            match &self.0 {
-                Cow::Borrowed(bytes) => Ok(rmp_serde::from_slice(bytes)?),
-                Cow::Owned(bytes) => Ok(rmp_serde::from_slice(&bytes)?),
-            }
-        }
-    }
 
     #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
     struct MyStructV1 {
