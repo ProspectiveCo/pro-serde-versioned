@@ -44,7 +44,7 @@ pub fn versioned_serialize(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     quote! {
-        impl #impl_generics #name #ty_generics #where_clause {
+        impl #impl_generics VersionedSerialize for #name #ty_generics #where_clause {
             fn serialize<F: SerializeFormat>(&self) -> Result<F, Box<dyn std::error::Error>> {
                 let envelope: Result<VersionedEnvelope<F>, Box<dyn std::error::Error>> = match self {
                     #(
@@ -84,7 +84,7 @@ pub fn versioned_deserialize(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     quote! {
-        impl #impl_generics #name #ty_generics #where_clause {
+        impl #impl_generics VersionedDeserialize for #name #ty_generics #where_clause {
             fn deserialize<'a, F: DeserializeFormat + Deserialize<'a>>(
                 data: &'a F,
             ) -> Result<Self, Box<dyn std::error::Error>> {
