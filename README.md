@@ -12,7 +12,6 @@ This Rust project provides a simple and convenient way to handle versioning and 
 Here's an example of how to use this library with a simple structure that has two versions:
 
 ```rust
-extern crate versioning;
 use serde::{Deserialize, Serialize};
 use versioning::*;
 use versioning_derive::{UpgradableEnum, VersionedDeserialize, VersionedSerialize};
