@@ -9,7 +9,7 @@
 // │                                                                           │
 // └───────────────────────────────────────────────────────────────────────────┘
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 trait UpgradableEnum {
     type Latest;
@@ -32,12 +32,6 @@ pub trait VersionedDeserialize: Sized + Clone {
         F: DeserializeFormat + Deserialize<'a>;
 }
 
-pub trait VersionedDeserializeOwned: Sized + Clone {
-    fn deserialize_owned<F>(data: &F) -> Result<Self, Box<dyn std::error::Error>>
-    where
-        F: DeserializeOwnedFormat;
-}
-
 pub trait SerializeFormat: Sized + Serialize {
     fn versioned_serialize<T>(data: T) -> Result<Self, Box<dyn std::error::Error>>
     where
@@ -48,12 +42,6 @@ pub trait DeserializeFormat: Sized {
     fn versioned_deserialize<'a, T>(&'a self) -> Result<T, Box<dyn std::error::Error>>
     where
         T: Deserialize<'a>;
-}
-
-pub trait DeserializeOwnedFormat: Sized + DeserializeOwned {
-    fn versioned_deserialize_owned<T>(&self) -> Result<T, Box<dyn std::error::Error>>
-    where
-        T: DeserializeOwned;
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -87,7 +75,6 @@ mod tests {
         fn versioned_deserialize<'b, T: Deserialize<'b>>(
             &'b self,
         ) -> Result<T, Box<dyn std::error::Error>> {
-            // todo!()
             match &self.0 {
                 Cow::Borrowed(bytes) => Ok(rmp_serde::from_slice(bytes)?),
                 Cow::Owned(bytes) => Ok(rmp_serde::from_slice(&bytes)?),
@@ -101,11 +88,12 @@ mod tests {
         }
     }
 
-    impl DeserializeOwnedFormat for serde_json::Value {
-        fn versioned_deserialize_owned<T: DeserializeOwned>(
-            &self,
-        ) -> Result<T, Box<dyn std::error::Error>> {
-            Ok(serde_json::from_value(self.clone())?)
+    impl DeserializeFormat for serde_json::Value {
+        fn versioned_deserialize<'a, T>(&'a self) -> Result<T, Box<dyn std::error::Error>>
+        where
+            T: Deserialize<'a>,
+        {
+            Ok(T::deserialize(self.clone())?)
         }
     }
 
@@ -164,7 +152,7 @@ mod tests {
         // let foo = value.versioned_deserialize()?;
         // let bar = MyStructVersion::from_versioned_envelope(foo)?;
 
-        let wrapper: MyStructVersion = MyStructVersion::deserialize_owned(&value)?;
+        let wrapper: MyStructVersion = MyStructVersion::deserialize(&value)?;
 
         assert_eq!(
             wrapper,
@@ -183,7 +171,7 @@ mod tests {
     #[test]
     fn test_msgpack_serde() -> Result<(), Box<dyn std::error::Error>> {
         let json_value: serde_json::Value = serde_json::from_str(V1_STRUCT)?;
-        let versioned_struct: MyStructVersion = MyStructVersion::deserialize_owned(&json_value)?;
+        let versioned_struct: MyStructVersion = MyStructVersion::deserialize(&json_value)?;
         let serialized_wrapper: MsgPackBytes = MyStructVersion::serialize(&versioned_struct)?;
 
         // We want this to be a borrow so that the msgpack deserialize is zero copy

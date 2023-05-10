@@ -86,24 +86,6 @@ pub fn versioned_deserialize(input: TokenStream) -> TokenStream {
                 }
             }
         }
-
-        impl VersionedDeserializeOwned for #name {
-            fn deserialize_owned<F: DeserializeOwnedFormat>(
-                data: &F,
-            ) -> Result<Self, Box<dyn std::error::Error>> {
-                let envelope: VersionedEnvelope<F> = F::versioned_deserialize_owned(data)?;
-                match envelope.version_number {
-                    #(
-                        #variant_versions => Ok(#name::#variant_names(
-                            <F as DeserializeOwnedFormat>::versioned_deserialize_owned(
-                                &envelope.data
-                            )
-                        ?)),
-                    )*
-                    _ => Err("Unknown version".into()),
-                }
-            }
-        }
     }
     .into()
 }
