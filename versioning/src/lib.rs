@@ -73,8 +73,6 @@ mod tests {
     use super::*;
     use super::formats::*;
 
-    use versioning_derive::{UpgradableEnum, VersionedDeserialize, VersionedSerialize};
-
     #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
     struct MyStructV1 {
         field1: String,
