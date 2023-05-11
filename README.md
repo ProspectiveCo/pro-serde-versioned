@@ -13,7 +13,15 @@ Here's an example of how to use this library with a simple structure that has tw
 
 ```rust
 use serde::{Deserialize, Serialize};
-use versioning::*;
+use versioning::{
+    VersionedSerialize,
+    VersionedDeserialize,
+    VersionedUpgrade,
+    Upgrade,
+    VersionedEnvelope,
+    SerializeFormat,
+    DeserializeFormat
+};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 struct MyStructV1 {
@@ -26,7 +34,7 @@ struct MyStructV2 {
     new_field: String,
 }
 
-#[derive(Debug, PartialEq, UpgradableEnum, VersionedSerialize, VersionedDeserialize, Clone)]
+#[derive(Debug, PartialEq, VersionedUpgrade, VersionedSerialize, VersionedDeserialize, Clone)]
 enum MyStructVersion {
     V1(MyStructV1),
     V2(MyStructV2),

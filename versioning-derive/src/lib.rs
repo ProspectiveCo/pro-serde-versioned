@@ -45,8 +45,8 @@ pub fn versioned_serialize(input: TokenStream) -> TokenStream {
 
     quote! {
         impl #impl_generics VersionedSerialize for #name #ty_generics #where_clause {
-            fn serialize<F: SerializeFormat>(&self) -> Result<F, Box<dyn std::error::Error>> {
-                let envelope: Result<VersionedEnvelope<F>, Box<dyn std::error::Error>> = match self {
+            fn to_envelope<F: SerializeFormat>(&self) -> Result<VersionedEnvelope<F>, F::Error> {
+                match self {
                     #(
                         #name::#variant_names(value) => {
                             Ok(VersionedEnvelope {
@@ -55,8 +55,7 @@ pub fn versioned_serialize(input: TokenStream) -> TokenStream {
                             })
                         }
                     )*
-                };
-                F::versioned_serialize(envelope?)
+                }
             }
         }
     }
@@ -85,10 +84,9 @@ pub fn versioned_deserialize(input: TokenStream) -> TokenStream {
 
     quote! {
         impl #impl_generics VersionedDeserialize for #name #ty_generics #where_clause {
-            fn deserialize<'a, F: DeserializeFormat + Deserialize<'a>>(
-                data: &'a F,
-            ) -> Result<Self, Box<dyn std::error::Error>> {
-                let envelope: VersionedEnvelope<F> = F::versioned_deserialize(&data)?;
+            fn from_envelope<'a, F: DeserializeFormat + Deserialize<'a>>(
+                envelope: &VersionedEnvelope<F>,
+            ) -> Result<Self, F::Error> {
                 match envelope.version_number {
                     #(
                         #variant_versions => Ok(#name::#variant_names(
@@ -97,7 +95,7 @@ pub fn versioned_deserialize(input: TokenStream) -> TokenStream {
                             )
                         ?)),
                     )*
-                    _ => Err("Unknown version".into()),
+                    _ => Err(serde::de::Error::custom("Unknown version number")),
                 }
             }
         }
@@ -105,7 +103,7 @@ pub fn versioned_deserialize(input: TokenStream) -> TokenStream {
     .into()
 }
 
-#[proc_macro_derive(UpgradableEnum)]
+#[proc_macro_derive(VersionedUpgrade)]
 pub fn upgradable_enum(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
     let name = &ast.ident;
@@ -130,7 +128,7 @@ pub fn upgradable_enum(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let gen = quote! {
-        impl #impl_generics UpgradableEnum for #name #ty_generics #where_clause {
+        impl #impl_generics VersionedUpgrade for #name #ty_generics #where_clause {
             type Latest = #latest_variant_ty;
             fn upgrade_to_latest(self) -> Self::Latest {
                 match self {

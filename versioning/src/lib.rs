@@ -13,7 +13,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Derivable trait used to chain upgrade a versioned wrapper to the latest version of a structure (e.g. v1 -> v2 -> ... -> latest)
-pub trait UpgradableEnum {
+pub trait VersionedUpgrade {
     type Latest;
     fn upgrade_to_latest(self) -> Self::Latest;
 }
@@ -25,28 +25,47 @@ pub trait Upgrade<To> {
 
 /// Allows for serializing to any supported format.
 pub trait VersionedSerialize {
-    fn serialize<F>(&self) -> Result<F, Box<dyn std::error::Error>>
+    fn to_envelope<F>(&self) -> Result<VersionedEnvelope<F>, F::Error>
     where
         F: SerializeFormat;
+
+    fn serialize<F>(&self) -> Result<F, F::Error>
+    where
+        F: SerializeFormat,
+    {
+        Ok(F::versioned_serialize(self.to_envelope::<F>()?)?)
+    }
 }
 
 /// Allows for serializing from any supported format.
 pub trait VersionedDeserialize: Sized + Clone {
-    fn deserialize<'a, F>(data: &'a F) -> Result<Self, Box<dyn std::error::Error>>
+    fn from_envelope<'a, F>(data: &VersionedEnvelope<F>) -> Result<Self, F::Error>
     where
         F: DeserializeFormat + Deserialize<'a>;
+
+    fn deserialize<'a, F>(data: &'a F) -> Result<Self, F::Error>
+    where
+        F: DeserializeFormat + Deserialize<'a>,
+    {
+        let envelope: VersionedEnvelope<F> = F::versioned_deserialize(data)?;
+        Self::from_envelope(&envelope)
+    }
 }
+
+// pub(crate) struct StrWrapper(&'static str);
 
 /// Serialize to the underlying format of a given serialization standard. (e.g. [serde_json::Value] for JSON, [std::borrow::Cow] of bytes for MsgPack, etc.)
 pub trait SerializeFormat: Sized + Serialize {
-    fn versioned_serialize<T>(data: T) -> Result<Self, Box<dyn std::error::Error>>
+    type Error: serde::ser::Error;
+    fn versioned_serialize<T>(data: T) -> Result<Self, Self::Error>
     where
         T: Serialize;
 }
 
 /// Deserialize from the underlying format of a given serialization standard. (e.g. [serde_json::Value] for JSON, [std::borrow::Cow] of bytes for MsgPack, etc.)
 pub trait DeserializeFormat: Sized {
-    fn versioned_deserialize<'a, T>(&'a self) -> Result<T, Box<dyn std::error::Error>>
+    type Error: serde::de::Error;
+    fn versioned_deserialize<'a, T>(&'a self) -> Result<T, Self::Error>
     where
         T: Deserialize<'a>;
 }
@@ -64,14 +83,14 @@ pub struct VersionedEnvelope<T> {
 pub mod formats;
 
 #[cfg(feature = "derive")]
-pub use versioning_derive::{UpgradableEnum, VersionedDeserialize, VersionedSerialize};
+pub use versioning_derive::{VersionedDeserialize, VersionedSerialize, VersionedUpgrade};
 
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
 
-    use super::*;
     use super::formats::*;
+    use super::*;
 
     #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
     struct MyStructV1 {
@@ -91,7 +110,9 @@ mod tests {
         second_new_field: String,
     }
 
-    #[derive(Debug, PartialEq, UpgradableEnum, VersionedSerialize, VersionedDeserialize, Clone)]
+    #[derive(
+        Debug, PartialEq, VersionedUpgrade, VersionedSerialize, VersionedDeserialize, Clone,
+    )]
     enum MyStructVersion {
         V1(MyStructV1),
         V2(MyStructV2),
@@ -189,7 +210,9 @@ mod tests {
             }
         }
 
-        #[derive(Debug, PartialEq, UpgradableEnum, VersionedSerialize, VersionedDeserialize, Clone)]
+        #[derive(
+            Debug, PartialEq, VersionedUpgrade, VersionedSerialize, VersionedDeserialize, Clone,
+        )]
         enum MyStructVersion {
             V1(MyStructV1),
             V2(MyStructV2),
@@ -244,7 +267,9 @@ mod tests {
             }
         }
 
-        #[derive(Debug, PartialEq, UpgradableEnum, VersionedSerialize, VersionedDeserialize, Clone)]
+        #[derive(
+            Debug, PartialEq, VersionedUpgrade, VersionedSerialize, VersionedDeserialize, Clone,
+        )]
         enum MyStructVersion {
             V1(MyStructV1),
             V2(MyStructV2),

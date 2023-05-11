@@ -1,26 +1,29 @@
 use std::borrow::Cow;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use crate::{SerializeFormat, DeserializeFormat};
+use crate::{DeserializeFormat, SerializeFormat};
 
 #[cfg(feature = "serde_json")]
 impl SerializeFormat for serde_json::Value {
-    fn versioned_serialize<T: Serialize>(data: T) -> Result<Self, Box<dyn std::error::Error>> {
+    type Error = serde_json::Error;
+
+    fn versioned_serialize<T: Serialize>(data: T) -> Result<Self, Self::Error> {
         Ok(serde_json::to_value(&data)?)
     }
 }
 
 #[cfg(feature = "serde_json")]
 impl DeserializeFormat for serde_json::Value {
-    fn versioned_deserialize<'a, T>(&'a self) -> Result<T, Box<dyn std::error::Error>>
+    type Error = serde_json::Error;
+
+    fn versioned_deserialize<'a, T>(&'a self) -> Result<T, Self::Error>
     where
         T: Deserialize<'a>,
     {
         Ok(T::deserialize(self.clone())?)
     }
 }
-
 
 /// Zero copy wrapper for MessagePack bytes stored as a [std::borrow::Cow] of bytes.
 #[cfg(feature = "serde_rmp")]
@@ -33,16 +36,16 @@ pub struct MsgPackBytes<'a>(
 
 #[cfg(feature = "serde_rmp")]
 impl SerializeFormat for MsgPackBytes<'_> {
-    fn versioned_serialize<T: Serialize>(data: T) -> Result<Self, Box<dyn std::error::Error>> {
+    type Error = rmp_serde::encode::Error;
+    fn versioned_serialize<T: Serialize>(data: T) -> Result<Self, Self::Error> {
         Ok(MsgPackBytes(Cow::Owned(rmp_serde::to_vec(&data)?)))
     }
 }
 
 #[cfg(feature = "serde_rmp")]
 impl<'a> DeserializeFormat for MsgPackBytes<'a> {
-    fn versioned_deserialize<'b, T: Deserialize<'b>>(
-        &'b self,
-    ) -> Result<T, Box<dyn std::error::Error>> {
+    type Error = rmp_serde::decode::Error;
+    fn versioned_deserialize<'b, T: Deserialize<'b>>(&'b self) -> Result<T, Self::Error> {
         match &self.0 {
             Cow::Borrowed(bytes) => Ok(rmp_serde::from_slice(bytes)?),
             Cow::Owned(bytes) => Ok(rmp_serde::from_slice(&bytes)?),
