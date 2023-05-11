@@ -52,8 +52,6 @@ pub trait VersionedDeserialize: Sized + Clone {
     }
 }
 
-// pub(crate) struct StrWrapper(&'static str);
-
 /// Serialize to the underlying format of a given serialization standard. (e.g. [serde_json::Value] for JSON, [std::borrow::Cow] of bytes for MsgPack, etc.)
 pub trait SerializeFormat: Sized + Serialize {
     type Error: serde::ser::Error;
