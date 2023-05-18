@@ -1,110 +1,310 @@
+// ┌───────────────────────────────────────────────────────────────────────────┐
+// │                                                                           │
+// │  ██████╗ ██████╗  ██████╗   Copyright (C) The Prospective Company         │
+// │  ██╔══██╗██╔══██╗██╔═══██╗  All Rights Reserved - April 2022              │
+// │  ██████╔╝██████╔╝██║   ██║                                                │
+// │  ██╔═══╝ ██╔══██╗██║   ██║  Proprietary and confidential. Unauthorized    │
+// │  ██║     ██║  ██║╚██████╔╝  copying of this file, via any medium is       │
+// │  ╚═╝     ╚═╝  ╚═╝ ╚═════╝   strictly prohibited.                          │
+// │                                                                           │
+// └───────────────────────────────────────────────────────────────────────────┘
+#![doc = include_str!("../../README.md")]
+
 use serde::{Deserialize, Serialize};
-use versioning_derive::UpgradableEnum;
 
-pub trait Upgrade<To> {
-    fn upgrade(self) -> To;
-}
-
-pub trait UpgradableEnum {
+/// Derivable trait used to chain upgrade a versioned wrapper to the latest version of a structure (e.g. v1 -> v2 -> ... -> latest)
+pub trait VersionedUpgrade {
     type Latest;
     fn upgrade_to_latest(self) -> Self::Latest;
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct MyStructV1 {
-    field1: String,
+/// Defines the next version of a given upgradable type (e.g. mystructv1 -> mystructv1)
+pub trait Upgrade<To> {
+    fn upgrade(self) -> To;
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct MyStructV2 {
-    field1: String,
-    new_field: String,
-}
+/// Allows for serializing to any supported format.
+pub trait VersionedSerialize {
+    fn to_envelope<F>(&self) -> Result<VersionedEnvelope<F>, F::Error>
+    where
+        F: SerializeFormat;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct MyStructV3 {
-    field1: String,
-    new_field: String,
-    second_new_field: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, UpgradableEnum)]
-#[serde(tag = "version")]
-pub enum MyStructVersion {
-    V1(MyStructV1),
-    V2(MyStructV2),
-    V3(MyStructV3),
-}
-
-// TODO: Test multiple enums that break out v1, 2, 3, 4, 5, 6 into v1, 2, 3 and v4, 5, 6.
-// TODO: Do partial deserialization
-// TODO: Test fields that change shape (e.g. string to array, etc.)
-// TODO: Test renaming fields
-
-impl Upgrade<MyStructV2> for MyStructV1 {
-    fn upgrade(self: MyStructV1) -> MyStructV2 {
-        MyStructV2 {
-            field1: self.field1.to_uppercase(),
-            new_field: "default_value".to_string(),
-        }
+    fn serialize<F>(&self) -> Result<F, F::Error>
+    where
+        F: SerializeFormat,
+    {
+        Ok(F::versioned_serialize(self.to_envelope::<F>()?)?)
     }
 }
 
-impl Upgrade<MyStructV3> for MyStructV2 {
-    fn upgrade(self: MyStructV2) -> MyStructV3 {
-        MyStructV3 {
-            field1: self.field1,
-            new_field: self.new_field,
-            second_new_field: "default_value_v3".to_string(),
-        }
+/// Allows for serializing from any supported format.
+pub trait VersionedDeserialize: Sized + Clone {
+    fn from_envelope<'a, F>(data: &VersionedEnvelope<F>) -> Result<Self, F::Error>
+    where
+        F: DeserializeFormat + Deserialize<'a>;
+
+    fn deserialize<'a, F>(data: &'a F) -> Result<Self, F::Error>
+    where
+        F: DeserializeFormat + Deserialize<'a>,
+    {
+        let envelope: VersionedEnvelope<F> = F::versioned_deserialize(data)?;
+        Self::from_envelope(&envelope)
     }
 }
+
+/// Serialize to the underlying format of a given serialization standard. (e.g. [serde_json::Value] for JSON, [std::borrow::Cow] of bytes for MsgPack, etc.)
+pub trait SerializeFormat: Sized + Serialize {
+    type Error: serde::ser::Error;
+    fn versioned_serialize<T>(data: T) -> Result<Self, Self::Error>
+    where
+        T: Serialize;
+}
+
+/// Deserialize from the underlying format of a given serialization standard. (e.g. [serde_json::Value] for JSON, [std::borrow::Cow] of bytes for MsgPack, etc.)
+pub trait DeserializeFormat: Sized {
+    type Error: serde::de::Error;
+    fn versioned_deserialize<'a, T>(&'a self) -> Result<T, Self::Error>
+    where
+        T: Deserialize<'a>;
+}
+
+/// Versioned wrapper for the underlying data format.
+/// Allows for partial deserialization of the data, and for
+/// the version number to be used to determine which
+/// deserialization method to use.
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct VersionedEnvelope<T> {
+    pub version_number: usize,
+    pub data: T,
+}
+
+pub mod formats;
+
+#[cfg(feature = "derive")]
+pub use versioning_derive::{VersionedDeserialize, VersionedSerialize, VersionedUpgrade};
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
+    use super::formats::*;
     use super::*;
 
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+    struct MyStructV1 {
+        field1: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+    struct MyStructV2 {
+        field1: String,
+        new_field: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+    struct MyStructV3 {
+        field1: String,
+        new_field: String,
+        second_new_field: String,
+    }
+
+    #[derive(
+        Debug, PartialEq, VersionedUpgrade, VersionedSerialize, VersionedDeserialize, Clone,
+    )]
+    enum MyStructVersion {
+        V1(MyStructV1),
+        V2(MyStructV2),
+        V3(MyStructV3),
+    }
+
+    impl Upgrade<MyStructV2> for MyStructV1 {
+        fn upgrade(self: MyStructV1) -> MyStructV2 {
+            MyStructV2 {
+                field1: self.field1.to_uppercase(),
+                new_field: "default_value".to_string(),
+            }
+        }
+    }
+
+    impl Upgrade<MyStructV3> for MyStructV2 {
+        fn upgrade(self: MyStructV2) -> MyStructV3 {
+            MyStructV3 {
+                field1: self.field1,
+                new_field: self.new_field,
+                second_new_field: "default_value_v3".to_string(),
+            }
+        }
+    }
+
     const V1_STRUCT: &'static str = r#"
-        {"version": "V1", "field1": "value1"}
+        {"version_number": 1, "data": {"field1": "value1"}}
     "#;
 
     #[test]
-    fn should_deserialize_valid_json() -> Result<(), serde_json::Error> {
-        let result = serde_json::from_str::<'static, MyStructVersion>(V1_STRUCT)?;
+    fn test_json_serde() -> Result<(), Box<dyn std::error::Error>> {
+        let value: serde_json::Value = serde_json::from_str(V1_STRUCT)?;
+
+        let wrapper: MyStructVersion = MyStructVersion::deserialize(&value)?;
+
         assert_eq!(
-            result,
+            wrapper,
             MyStructVersion::V1(MyStructV1 {
                 field1: "value1".to_string()
             })
         );
+
+        let serialized_wrapper: serde_json::Value = MyStructVersion::serialize(&wrapper)?;
+
+        assert_eq!(serialized_wrapper, value);
+
         Ok(())
     }
 
     #[test]
-    fn should_upgrade_v1_to_v2() -> Result<(), serde_json::Error> {
-        let result = serde_json::from_str::<'static, MyStructV1>(V1_STRUCT)?;
+    fn test_msgpack_serde() -> Result<(), Box<dyn std::error::Error>> {
+        let json_value: serde_json::Value = serde_json::from_str(V1_STRUCT)?;
+        let versioned_struct: MyStructVersion = MyStructVersion::deserialize(&json_value)?;
+        let serialized_wrapper: MsgPackBytes = MyStructVersion::serialize(&versioned_struct)?;
+
+        // We want this to be a borrow so that the msgpack deserialize is zero copy
+        let serialized_wrapper = serialized_wrapper.0.as_ref().into();
+
+        assert!(match serialized_wrapper {
+            Cow::Borrowed(_) => true,
+            Cow::Owned(_) => false,
+        });
+
+        let hex = serialized_wrapper
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        assert_eq!(hex, "92 01 c4 08 91 a6 76 61 6c 75 65 31");
+
+        // Asserting that serializer is symmetric
+        let _: MyStructVersion = MyStructVersion::deserialize(&MsgPackBytes(serialized_wrapper))?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_change_field_representation() -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct MyStructV1 {
+            field1: String,
+        }
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct MyStructV2 {
+            field1: Vec<u8>,
+        }
+
+        impl Upgrade<MyStructV2> for MyStructV1 {
+            fn upgrade(self: MyStructV1) -> MyStructV2 {
+                MyStructV2 {
+                    field1: self.field1.into_bytes(),
+                }
+            }
+        }
+
+        #[derive(
+            Debug, PartialEq, VersionedUpgrade, VersionedSerialize, VersionedDeserialize, Clone,
+        )]
+        enum MyStructVersion {
+            V1(MyStructV1),
+            V2(MyStructV2),
+        }
+
+        let v1_struct = MyStructVersion::V1(MyStructV1 {
+            field1: "value1".to_string(),
+        });
+
+        let serialized_wrapper: serde_json::Value = MyStructVersion::serialize(&v1_struct)?;
+
         assert_eq!(
-            result.upgrade(),
+            serialized_wrapper,
+            serde_json::json!({
+                "version_number": 1,
+                "data": {
+                    "field1": "value1"
+                }
+            })
+        );
+
+        let v2_struct = MyStructVersion::deserialize(&serialized_wrapper)?.upgrade_to_latest();
+
+        assert_eq!(
+            v2_struct,
             MyStructV2 {
-                field1: "VALUE1".to_string(),
-                new_field: "default_value".to_string()
+                field1: "value1".to_string().into_bytes()
             }
         );
+
         Ok(())
     }
 
     #[test]
-    fn upgrade_to_latest_should_compose_upgrade_fns() -> Result<(), serde_json::Error> {
-        let result = serde_json::from_str::<'static, MyStructVersion>(V1_STRUCT)?;
-        let upgraded = result.upgrade_to_latest();
-        assert_eq!(
-            upgraded,
-            MyStructV3 {
-                field1: "VALUE1".to_string(),
-                new_field: "default_value".to_string(),
-                second_new_field: "default_value_v3".to_string()
+    fn test_remove_field() -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct MyStructV1 {
+            field1: String,
+            field2: String,
+        }
+
+        #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+        struct MyStructV2 {
+            field1: String,
+        }
+
+        impl Upgrade<MyStructV2> for MyStructV1 {
+            fn upgrade(self: MyStructV1) -> MyStructV2 {
+                MyStructV2 {
+                    field1: self.field1,
+                }
             }
+        }
+
+        #[derive(
+            Debug, PartialEq, VersionedUpgrade, VersionedSerialize, VersionedDeserialize, Clone,
+        )]
+        enum MyStructVersion {
+            V1(MyStructV1),
+            V2(MyStructV2),
+        }
+
+        let v1_struct = MyStructVersion::V1(MyStructV1 {
+            field1: "value1".to_string(),
+            field2: "value2".to_string(),
+        });
+
+        let serialized_wrapper: serde_json::Value = MyStructVersion::serialize(&v1_struct)?;
+
+        assert_eq!(
+            serialized_wrapper,
+            serde_json::json!({
+                "version_number": 1,
+                "data": {
+                    "field1": "value1",
+                    "field2": "value2"
+                }
+            })
         );
+
+        let v2_struct = MyStructVersion::deserialize(&serialized_wrapper)?.upgrade_to_latest();
+
+        let v2_serialized: serde_json::Value = MyStructVersion::V2(v2_struct).serialize()?;
+
+        assert_eq!(
+            v2_serialized,
+            serde_json::json!({
+                "version_number": 2,
+                "data": {
+                    "field1": "value1"
+                }
+            })
+        );
+
         Ok(())
     }
 }

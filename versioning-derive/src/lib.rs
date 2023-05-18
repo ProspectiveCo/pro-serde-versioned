@@ -1,12 +1,109 @@
-extern crate proc_macro;
-
+// ┌───────────────────────────────────────────────────────────────────────────┐
+// │                                                                           │
+// │  ██████╗ ██████╗  ██████╗   Copyright (C) The Prospective Company         │
+// │  ██╔══██╗██╔══██╗██╔═══██╗  All Rights Reserved - April 2022              │
+// │  ██████╔╝██████╔╝██║   ██║                                                │
+// │  ██╔═══╝ ██╔══██╗██║   ██║  Proprietary and confidential. Unauthorized    │
+// │  ██║     ██║  ██║╚██████╔╝  copying of this file, via any medium is       │
+// │  ╚═╝     ╚═╝  ╚═╝ ╚═════╝   strictly prohibited.                          │
+// │                                                                           │
+// └───────────────────────────────────────────────────────────────────────────┘
 use std::collections::HashMap;
 
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields};
 
-#[proc_macro_derive(UpgradableEnum, attributes(latest))]
+#[derive(Debug)]
+struct VersionVariant {
+    version_number: usize,
+    variant_ident: syn::Ident,
+    variant_ty: syn::Type,
+    latest: bool,
+}
+
+#[proc_macro_derive(VersionedSerialize)]
+pub fn versioned_serialize(input: TokenStream) -> TokenStream {
+    let ast: DeriveInput = syn::parse(input).unwrap();
+    let name = &ast.ident;
+
+    let version_variants = get_version_variants(&ast);
+    let variant_names: Vec<_> = version_variants
+        .values()
+        .map(|version_variant| &version_variant.variant_ident)
+        .cloned()
+        .collect();
+
+    let variant_versions: Vec<_> = version_variants
+        .values()
+        .map(|version_variant| version_variant.version_number)
+        .collect();
+
+    let generics = ast.generics;
+
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    quote! {
+        impl #impl_generics VersionedSerialize for #name #ty_generics #where_clause {
+            fn to_envelope<F: SerializeFormat>(&self) -> Result<VersionedEnvelope<F>, F::Error> {
+                match self {
+                    #(
+                        #name::#variant_names(value) => {
+                            Ok(VersionedEnvelope {
+                                version_number: #variant_versions.into(),
+                                data: <F as SerializeFormat>::versioned_serialize(&value)?
+                            })
+                        }
+                    )*
+                }
+            }
+        }
+    }
+    .into()
+}
+
+#[proc_macro_derive(VersionedDeserialize)]
+pub fn versioned_deserialize(input: TokenStream) -> TokenStream {
+    let ast: DeriveInput = syn::parse(input).unwrap();
+    let name = &ast.ident;
+
+    let version_variants = get_version_variants(&ast);
+    let variant_names: Vec<_> = version_variants
+        .values()
+        .map(|version_variant| &version_variant.variant_ident)
+        .cloned()
+        .collect();
+
+    let variant_versions: Vec<_> = version_variants
+        .values()
+        .map(|version_variant| version_variant.version_number)
+        .collect();
+
+    let generics = ast.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    quote! {
+        impl #impl_generics VersionedDeserialize for #name #ty_generics #where_clause {
+            fn from_envelope<'a, F: DeserializeFormat + Deserialize<'a>>(
+                envelope: &VersionedEnvelope<F>,
+            ) -> Result<Self, F::Error> {
+                match envelope.version_number {
+                    #(
+                        #variant_versions => Ok(#name::#variant_names(
+                            <F as DeserializeFormat>::versioned_deserialize(
+                                &envelope.data
+                            )
+                        ?)),
+                    )*
+                    _ => Err(serde::de::Error::custom("Unknown version number")),
+                }
+            }
+        }
+    }
+    .into()
+}
+
+#[proc_macro_derive(VersionedUpgrade)]
 pub fn upgradable_enum(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
     let name = &ast.ident;
@@ -27,9 +124,11 @@ pub fn upgradable_enum(input: TokenStream) -> TokenStream {
 
     let upgrade_match_arms = generate_upgrade_match_arms(&ast, version_variants);
 
-    // gen.into()
+    let generics = ast.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
     let gen = quote! {
-        impl UpgradableEnum for #name {
+        impl #impl_generics VersionedUpgrade for #name #ty_generics #where_clause {
             type Latest = #latest_variant_ty;
             fn upgrade_to_latest(self) -> Self::Latest {
                 match self {
@@ -40,14 +139,6 @@ pub fn upgradable_enum(input: TokenStream) -> TokenStream {
     };
 
     gen.into()
-}
-
-#[derive(Debug)]
-struct VersionVariant {
-    version_number: usize,
-    variant_ident: syn::Ident,
-    variant_ty: syn::Type,
-    latest: bool,
 }
 
 fn generate_upgrade_match_arms(

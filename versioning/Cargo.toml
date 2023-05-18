@@ -1,12 +1,20 @@
 [package]
 name = "versioning"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["serde_rmp", "serde_json", "derive"]
+serde_rmp = ["dep:rmp-serde"]
+serde_json = ["dep:serde_json"]
+derive = ["dep:versioning-derive"]
 
 [dependencies]
-serde = { version = "1.0.59", features = ["derive"] }
-serde_json = { version = "1.0.59", features = ["raw_value"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["raw_value"], optional = true }
+rmp-serde = { version = "1.1.1", optional = true }
+serde_bytes = "0.11.9"
+versioning-derive = { path = "../versioning-derive", version = "=1.0.0", optional = true }
 
+[dev-dependencies]
 versioning-derive = { path = "../versioning-derive" }
