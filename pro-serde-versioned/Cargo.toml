@@ -1,6 +1,6 @@
 [package]
 name = "pro-serde-versioned"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 authors = ["Tim Bess <tim@prospective.dev>"]
 categories = ["encoding"]
@@ -18,7 +18,7 @@ serde_json = ["dep:serde_json"]
 derive = ["dep:pro-serde-versioned-derive"]
 
 [dependencies]
-pro-serde-versioned-derive = { version = "=1.0.0", path = "../pro-serde-versioned-derive", optional = true }
+pro-serde-versioned-derive = { version = "=1.0.1", path = "../pro-serde-versioned-derive", optional = true }
 rmp-serde = { version = "1.1.1", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11.9"
