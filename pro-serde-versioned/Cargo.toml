@@ -1,0 +1,28 @@
+[package]
+name = "pro-serde-versioned"
+version = "1.0.0"
+edition = "2021"
+authors = ["Tim Bess <tim@prospective.dev>"]
+categories = ["encoding"]
+description = "A "
+homepage = "https://github.com/ProspectiveCo/pro-serde-versioned"
+keywords = ["serde", "serialization"]
+license = "Apache-2.0"
+repository = "https://github.com/ProspectiveCo/pro-serde-versioned"
+rust-version = "1.69"
+
+[features]
+default = ["serde_rmp", "serde_json", "derive"]
+serde_rmp = ["dep:rmp-serde"]
+serde_json = ["dep:serde_json"]
+derive = ["dep:pro-serde-versioned-derive"]
+
+[dependencies]
+pro-serde-versioned-derive = { version = "=1.0.0", path = "../pro-serde-versioned-derive", optional = true }
+rmp-serde = { version = "1.1.1", optional = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_bytes = "0.11.9"
+serde_json = { version = "1.0", features = ["raw_value"], optional = true }
+
+[dev-dependencies]
+pro-serde-versioned-derive = { path = "../pro-serde-versioned-derive" }
