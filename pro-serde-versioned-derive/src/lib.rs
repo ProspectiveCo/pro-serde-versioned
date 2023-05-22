@@ -26,12 +26,16 @@ struct VersionVariant {
 pub fn versioned_serialize(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
     let name = &ast.ident;
-
     let version_variants = get_version_variants(&ast);
     let variant_names: Vec<_> = version_variants
         .values()
         .map(|version_variant| &version_variant.variant_ident)
         .cloned()
+        .collect();
+
+    let variant_tys: Vec<_> = version_variants
+        .values()
+        .map(|version_variant| version_variant.variant_ty.clone())
         .collect();
 
     let variant_versions: Vec<_> = version_variants
@@ -40,18 +44,44 @@ pub fn versioned_serialize(input: TokenStream) -> TokenStream {
         .collect();
 
     let generics = ast.generics;
-
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
     quote! {
-        impl #impl_generics VersionedSerialize for #name #ty_generics #where_clause {
-            fn to_envelope<F: SerializeFormat>(&self) -> Result<VersionedEnvelope<F>, F::Error> {
+        #(
+            impl #impl_generics From<#variant_tys> for #name #ty_generics #where_clause {
+                fn from(value: #variant_tys) -> #name {
+                    #name::#variant_names(value)
+                }
+            }
+
+            // // TODO This would be handy, but will create conflicts when
+            // // multiple enums use `#variant_tys`, as we do in the tests.
+
+            // impl VersionedSerialize for #variant_tys {
+            //     fn versioned_serialize<F: SerializeFormat>(&self) -> Result<F, Box<dyn std::error::Error>> {
+            //         #[derive(Serialize, Deserialize)]
+            //         pub struct VersionedEnvelope<T> {
+            //             pub version_number: usize,
+            //             pub data: T,
+            //         }
+
+            //         let envelope = VersionedEnvelope {
+            //             version_number: #variant_versions,
+            //             data: F::serialize_format(&self)?
+            //         };
+
+            //         F::serialize_format(envelope)
+            //     }
+            // }
+        )*
+
+        impl #impl_generics ::pro_serde_versioned::VersionedSerialize for #name #ty_generics #where_clause {
+            fn to_envelope<F: ::pro_serde_versioned::SerializeFormat>(&self) -> Result<::pro_serde_versioned::VersionedEnvelope<F>, F::Error> {
                 match self {
                     #(
                         #name::#variant_names(value) => {
-                            Ok(VersionedEnvelope {
-                                version_number: #variant_versions.into(),
-                                data: <F as SerializeFormat>::versioned_serialize(&value)?
+                            Ok(::pro_serde_versioned::VersionedEnvelope {
+                                version_number: #variant_versions,
+                                data: F::serialize_format(&value)?
                             })
                         }
                     )*
@@ -83,14 +113,14 @@ pub fn versioned_deserialize(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     quote! {
-        impl #impl_generics VersionedDeserialize for #name #ty_generics #where_clause {
-            fn from_envelope<'a, F: DeserializeFormat + Deserialize<'a>>(
-                envelope: &VersionedEnvelope<F>,
+        impl #impl_generics ::pro_serde_versioned::VersionedDeserialize for #name #ty_generics #where_clause {
+            fn from_envelope<'a, F: ::pro_serde_versioned::DeserializeFormat + Deserialize<'a>>(
+                envelope: &::pro_serde_versioned::VersionedEnvelope<F>,
             ) -> Result<Self, F::Error> {
                 match envelope.version_number {
                     #(
                         #variant_versions => Ok(#name::#variant_names(
-                            <F as DeserializeFormat>::versioned_deserialize(
+                            <F as ::pro_serde_versioned::DeserializeFormat>::deserialize_format(
                                 &envelope.data
                             )
                         ?)),
@@ -128,7 +158,7 @@ pub fn upgradable_enum(input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let gen = quote! {
-        impl #impl_generics VersionedUpgrade for #name #ty_generics #where_clause {
+        impl #impl_generics ::pro_serde_versioned::VersionedUpgrade for #name #ty_generics #where_clause {
             type Latest = #latest_variant_ty;
             fn upgrade_to_latest(self) -> Self::Latest {
                 match self {

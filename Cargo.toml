@@ -1,5 +1,2 @@
 [workspace]
-members = [
-  "versioning",
-  "versioning-derive",
-]
+members = ["pro-serde-versioned", "pro-serde-versioned-derive"]
