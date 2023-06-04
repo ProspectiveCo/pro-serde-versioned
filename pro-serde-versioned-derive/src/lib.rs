@@ -75,7 +75,8 @@ pub fn versioned_serialize(input: TokenStream) -> TokenStream {
         )*
 
         impl #impl_generics ::pro_serde_versioned::VersionedSerialize for #name #ty_generics #where_clause {
-            fn to_envelope<F: ::pro_serde_versioned::SerializeFormat>(&self) -> Result<::pro_serde_versioned::VersionedEnvelope<F>, F::Error> {
+            type VersionedEnvelope<A: Serialize> = ::pro_serde_versioned::VersionedEnvelope<A>;
+            fn to_envelope<F: ::pro_serde_versioned::SerializeFormat>(&self) -> Result<Self::VersionedEnvelope<F>, F::Error> {
                 match self {
                     #(
                         #name::#variant_names(value) => {
@@ -114,6 +115,7 @@ pub fn versioned_deserialize(input: TokenStream) -> TokenStream {
 
     quote! {
         impl #impl_generics ::pro_serde_versioned::VersionedDeserialize for #name #ty_generics #where_clause {
+            type VersionedEnvelope<'a, F: Deserialize<'a>> = ::pro_serde_versioned::VersionedEnvelope<F>;
             fn from_envelope<'a, F: ::pro_serde_versioned::DeserializeFormat + Deserialize<'a>>(
                 envelope: &::pro_serde_versioned::VersionedEnvelope<F>,
             ) -> Result<Self, F::Error> {

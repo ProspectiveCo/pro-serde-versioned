@@ -34,7 +34,9 @@ pub trait Upgrade<To> {
 
 /// Allows for serializing to any supported format.
 pub trait VersionedSerialize {
-    fn to_envelope<F>(&self) -> Result<VersionedEnvelope<F>, F::Error>
+    type VersionedEnvelope<F: Serialize>: Serialize;
+
+    fn to_envelope<F>(&self) -> Result<Self::VersionedEnvelope<F>, F::Error>
     where
         F: SerializeFormat;
 
@@ -48,7 +50,9 @@ pub trait VersionedSerialize {
 
 /// Allows for serializing from any supported format.
 pub trait VersionedDeserialize: Sized + Clone {
-    fn from_envelope<'a, F>(data: &VersionedEnvelope<F>) -> Result<Self, F::Error>
+    type VersionedEnvelope<'a, F: Deserialize<'a>>: Deserialize<'a>;
+
+    fn from_envelope<'a, F>(data: &Self::VersionedEnvelope<'a, F>) -> Result<Self, F::Error>
     where
         F: DeserializeFormat + Deserialize<'a>;
 
@@ -56,7 +60,7 @@ pub trait VersionedDeserialize: Sized + Clone {
     where
         F: DeserializeFormat + Deserialize<'a>,
     {
-        let envelope: VersionedEnvelope<F> = F::deserialize_format(data)?;
+        let envelope: Self::VersionedEnvelope<'a, F> = F::deserialize_format(data)?;
         Self::from_envelope(&envelope)
     }
 }
