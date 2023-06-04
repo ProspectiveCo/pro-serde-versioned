@@ -1,6 +1,6 @@
 [package]
 name = "pro-serde-versioned-derive"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 description = "Macros for use with pro-serde-versioned"
 license = "Apache-2.0"
